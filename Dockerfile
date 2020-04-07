@@ -1,6 +1,3 @@
-FROM python:buster
+FROM apache/airflow:master-ci
 
 WORKDIR /srv
-
-COPY . ./data-template
-RUN pip install ./data-template

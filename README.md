@@ -1,4 +1,4 @@
-# data-template
+# dag
 
 ## repo setup
 
