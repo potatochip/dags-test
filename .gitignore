@@ -1,0 +1,35 @@
+# Local environment variables
+.env
+.idea/*
+.DS_Store
+.vscode/
+
+# Distribution / packaging
+dist/*
+*.eggs
+*.egg-info/
+*.egg
+
+# Temporary files
+tmp/*
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.mypy_cache
+
+# C extensions
+*.so
+*.pyc
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*,cover
+.pytest_cache/
