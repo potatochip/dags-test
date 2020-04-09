@@ -1,8 +1,10 @@
 # dag
 
-## repo setup
+## Table of contents
 
-- fill out readme
-- write some tests
-- `setup.py`: change value for `name`
-- `Jenkinsfile`: change keys in `environment` to appropriate values
+dag: package for dag task logic and utils
+dags: dags and their relationships are defined here on a region basis
+dockerfiles: defines containers that can be used by kubernetes pod operator
+plugins: airflow plugins directory
+requirements: package depedencies
+tests: write some tests

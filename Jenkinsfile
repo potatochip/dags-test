@@ -5,9 +5,10 @@ pipeline {
     }
 
     environment {
-        PROJECT = 'data-template'
+        PROJECT = 'dags'
         CHANNEL = '#test-slack-notif'
-        IMAGE = 'juvo/data-template'
+        IMAGE = "juvo/${PROJECT}"
+        TEST_CONTAINER = "${PROJECT}_test"
     }
 
     agent {
@@ -15,6 +16,7 @@ pipeline {
             label 'jenkins-data'
             yaml libraryResource('pod_templates/data_agent_dind.yaml')
             defaultContainer 'jenkins-agent-data'
+            idleMinutes 600
         }
     }
 
@@ -22,47 +24,63 @@ pipeline {
         stage('Start') {
             steps {
                 sendStartBuildNotification(env.CHANNEL)
+                cleanWs()
                 checkout scm
                 script {
                     env.HASH = getGitCommitHash()
                     env.TAG = buildDockerTag(env.BRANCH_NAME, env.HASH)
-                    currentBuild.description = env.imageTag
                 }
             }
         }
-        stage('Sniff') {
+        stage('Lint') {
+            steps {
+                sh "flake8 ."
+            }
+        }
+        stage('Build Test Container') {
+            steps {
+                sh "docker build --target test -t ${IMAGE} ."
+                sh "docker run --name ${TEST_CONTAINER} -v ${WORKSPACE}:/srv -it -d ${IMAGE} /bin/bash"
+            }
+        }
+        stage('Test') {
             parallel {
-                stage('Lint') {
+                stage('Type Check Packages') {
                     steps {
-                        sh "flake8 ."
+                        sh "docker exec ${TEST_CONTAINER} mypy -p dag --junit-xml reports/mypy_packages.xml"
                     }
                 }
-                stage('Type Checking') {
+                stage('Type Check Dags') {
                     steps {
-                        sh "mypy ."
+                        sh "docker exec ${TEST_CONTAINER} mypy --namespace-packages -p dags --junit-xml reports/mypy_dags.xml"
                     }
                 }
-                stage('Static Analysis') {
+                stage('Type Check Plugins') {
                     steps {
-                        withSonarQubeEnv('SonarQube') {
-                            sh "sonar-scanner -Dsonar.host.url=${SONAR_HOST_URL} -Dsonar.projectKey=${PROJECT}"
-                        }
+                        sh "docker exec ${TEST_CONTAINER} mypy --namespace-packages -p plugins --junit-xml reports/mypy_plugins.xml"
                     }
                 }
-                stage('Build') {
-                    stages {
-                        stage('Build') {
-                            steps {
-                                buildDockerContainer(env.IMAGE, env.TAG)
-                            }
-                        }
-                        stage('Test') {
-                            steps {
-                                sh "docker run --entrypoint /bin/bash ${IMAGE}:${TAG} -c 'pip install ./${PROJECT}[test]; pytest'"
-                            }
-                        }
+                stage('Test') {
+                    steps {
+                        sh "docker exec ${TEST_CONTAINER} pytest --junitxml=reports/nosetests.xml --cov --cov-report=xml:reports/coverage.xml --cov-report=html:reports/coverage.html"
                     }
                 }
+            }
+        }
+       stage('Static Analysis') {
+            steps {
+                sh "sed -i 's|/srv|${WORKSPACE}|' reports/coverage.xml"
+                withSonarQubeEnv('SonarQube') {
+                    sh "sonar-scanner -Dsonar.host.url=${SONAR_HOST_URL} -Dsonar.projectKey=${PROJECT}  -Dsonar.python.coverage.reportPaths=reports/coverage.xml"
+                }
+            }
+        }
+        stage('Build Prod Image') {
+            when {
+                branch "master"
+            }
+            steps {
+                sh "docker build -t ${IMAGE}:${TAG} --target production \\."
             }
         }
         stage('Push') {
@@ -76,6 +94,11 @@ pipeline {
     }
 
     post {
+        always {
+            sh "docker rm --force ${TEST_CONTAINER}"
+            archiveArtifacts artifacts: 'reports/*', fingerprint: true
+            junit 'reports/*.xml'
+        }
         failure {
             sendEndBuildNotification(currentBuild.currentResult, env.CHANNEL, '')
         }
