@@ -1,4 +1,4 @@
-FROM apache/airflow:master-ci as builder
+FROM apache/airflow:master-python3.7-ci as builder
 
 WORKDIR /srv
 
