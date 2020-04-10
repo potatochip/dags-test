@@ -1,2 +1,2 @@
 # dependencies should be listed in the requirements folder instead of here
--r ./requirements/dev.txt
+-r ./dockerfiles/airflow/requirements/dev.txt

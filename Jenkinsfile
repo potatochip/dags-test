@@ -39,7 +39,7 @@ pipeline {
         }
         stage('Build Test Container') {
             steps {
-                sh "docker build --target test -t ${IMAGE} ."
+                sh "docker build --target test -t ${IMAGE} -f docker/airflow/Dockerfile"
                 sh "docker run --name ${TEST_CONTAINER} -v ${WORKSPACE}:/srv -it -d ${IMAGE} /bin/bash"
             }
         }
@@ -80,7 +80,7 @@ pipeline {
                 branch "master"
             }
             steps {
-                sh "docker build -t ${IMAGE}:${TAG} --target production \\."
+                sh "docker build -t ${IMAGE}:${TAG} --target production -f docker/airflow/Dockerfile"
             }
         }
         stage('Push') {

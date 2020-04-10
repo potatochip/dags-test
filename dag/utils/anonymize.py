@@ -18,11 +18,25 @@ class Anonymizer:
         self._fernet = Fernet(key)
 
     def encrypt(self, value: str) -> str:
-        """Encrypt a value."""
+        """Encrypt a string.
+
+        Args:
+            value (str): The string to encrypt
+
+        Returns:
+            str: The encrypted string
+        """
         # convert to str just in case
         value = str(value)
         return self._fernet.encrypt(value)
 
     def decrypt(self, value: str) -> str:
-        """Decrypt a value."""
+        """Decrypt an encrypted string.
+
+        Args:
+            value (str): An encrypted string
+
+        Returns:
+            str: The string decrypted
+        """
         return self._fernet.decrypt(value)
