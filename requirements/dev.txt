@@ -1,0 +1,5 @@
+-r test.txt
+apache-airflow
+flake8
+flake8-docstrings
+watchdog[watchmedo]
