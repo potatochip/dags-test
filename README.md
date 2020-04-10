@@ -1,4 +1,4 @@
-# dag
+# dags
 
 ## Table of contents
 
