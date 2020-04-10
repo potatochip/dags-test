@@ -42,14 +42,16 @@ def ingest_pii_file(input_path: str,
     csv_kwargs = csv_kwargs or {}
     anonymizer = Anonymizer()
 
-    # read the s3 file as a series of dataframes streamed in chunks
+    # read the s3 file as a series of streamed dataframes
     reader = pd.read_csv(open(input_path), chunksize=100000, **csv_kwargs)
 
     # write the new file as a multipart stream to s3
     with open(output_path, 'w') as f:
         df = next(reader)
         df = transform(df)
+        # write the first chunk with the csv header
         df.to_csv(f, index=False, header=True)
         for df in reader:
             df = transform(df)
+            # every chunk after the first ignore the csv header
             df.to_csv(f, index=False, header=False)
