@@ -19,6 +19,8 @@ def ingest_pii_file(input_path: str,
     This reads a csv and writes an anonymized and optionally transformed
     version of it to our public path.
 
+    The execution date is automatically appended to the file.
+
     Args:
         input_path (str): Path to raw carrier file
         output_path (str): Path where new file should be written

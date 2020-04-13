@@ -3,7 +3,7 @@ from datetime import datetime
 
 
 # dates
-START_DATE = datetime(2020, 4, 1)
+LAUNCH_DATE = datetime(2020, 4, 1)
 
 # s3
 RAW_CARRIER_BUCKET = 'timbrazil-internal'
