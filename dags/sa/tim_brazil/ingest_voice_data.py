@@ -1,10 +1,22 @@
-from datetime import datetime, timedelta
+"""Ingests raw voice data files from TIM Brazil.
+
+Frequency: Daily incremental extraction.
+
+Inputs:
+    S3: timbrazil-internal
+
+Outputs:
+    S3: timbrazil-public
+
+Alerts:
+    airflow@juvo.com
+"""
+from datetime import timedelta
 from pathlib import Path
 
 from airflow import DAG
-from airflow.operators.python_operator import PythonOperator
+from airflow.operators.ingestion import IngestPIIOperator
 
-from dag.tasks.ingest import ingest_pii_file
 from settings import tim_brazil
 
 # TODO
@@ -25,10 +37,14 @@ default_args = {
 dag = DAG('tim_brazil.ingest_voice_data',
           default_args=default_args)
 
-PREFIX = 'voice/ocs_file_{{ds}}.csv'
+PREFIX = 'voice/ocs_file_{{ ds }}.csv'  # TODO: fix me
 
 
-def transform(df):
+def transform_dataframe(df):
+    """Transform dataframe.
+
+    Mostly revolves around correting msisdn prior to anonymization.
+    """
     # cast msisdn columns to str if failed to cast on initial read
     df['MSISDN_A'] = df.MSISDN_A.astype(str)
     df['MSISDN_B'] = df.MSISDN_B.astype(str)
@@ -44,15 +60,11 @@ def transform(df):
     return df
 
 
-ingest = PythonOperator(
+ingest = IngestPIIOperator(
     task_id='ingest',
-    python_callable=ingest_pii_file,
-    provide_context=True,
-    op_kwargs=dict(
-        input_path=Path('s3://', tim_brazil.RAW_CARRIER_BUCKET, PREFIX),
-        output_path=Path('s3://', tim_brazil.ANONYMIZED_CARRIER_BUCKET, PREFIX),
-        pii_columns=['MSISDN_A', 'MSISDN_B'],
-        transform_func=transform,
-        csv_kwargs=dict(delimiter=';')
-    )
+    input_path=Path('s3://', tim_brazil.RAW_CARRIER_BUCKET, PREFIX),
+    output_path=Path('s3://', tim_brazil.ANONYMIZED_CARRIER_BUCKET, PREFIX),
+    pii_columns=['MSISDN_A', 'MSISDN_B'],
+    transform_func=transform_dataframe,
+    csv_kwargs=dict(delimiter=';')
 )

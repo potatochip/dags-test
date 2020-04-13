@@ -91,6 +91,6 @@ class TestRawFiles:
             for var in vars(module).values():
                 if isinstance(var, DAG):
                     id_ = var.dag_id
-                    msg = f'Duplicate DAG id `{id_}` found: ({fpath}, {seen_ids[region][id_]})'
+                    msg = f'Duplicate DAG id `{id_}` found: ({fpath}, {seen_ids[region].get(id_)})'
                     assert id_ not in seen_ids[region], msg
                     seen_ids[region][id_] = fpath

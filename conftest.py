@@ -9,21 +9,19 @@ from pathlib import Path
 
 import pytest
 from _pytest.monkeypatch import MonkeyPatch
-from rfernet import Fernet
 
-THIS_FILE = Path(__file__)
+THIS_FILE = Path(__file__).resolve()
 ROOT_DIR = THIS_FILE.parent
 
 ENV = os.environ
 # do not set AIRFLOW_HOME in order to avoid littering repo with
 # files that airflow creates automatically
-ENV['AIRFLOW_CONFIG'] = str(ROOT_DIR.joinpath('airflow.cfg').resolve())
-ENV['AIRFLOW__CORE__UNIT_TEST_MODE'] = 'True'
-ENV['AIRFLOW__CORE__DAGS_FOLDER'] = str(ROOT_DIR.joinpath('dags').resolve())
-ENV['AIRFLOW__CORE__PLUGINS_FOLDER'] = str(ROOT_DIR.joinpath('plugins').resolve())
+ENV['AIRFLOW__CORE__DAGS_FOLDER'] = str(ROOT_DIR.joinpath('dags'))
+ENV['AIRFLOW__CORE__PLUGINS_FOLDER'] = str(ROOT_DIR.joinpath('plugins'))
 
-AIRFLOW_TEST_FERNET_KEY = 'TRSq95QF5Pj9ldN002l0GgLX3ze-d92ZSZAmz3pd4wY='
-ENV['FERNET_KEY'] = AIRFLOW_TEST_FERNET_KEY
+TEST_FERNET_KEY = 'TRSq95QF5Pj9ldN002l0GgLX3ze-d92ZSZAmz3pd4wY='
+ENV['FERNET_KEY'] = TEST_FERNET_KEY
+ENV['ANONYMIZER_FERNET_KEY'] = TEST_FERNET_KEY
 
 
 @pytest.fixture(scope='session')
@@ -49,17 +47,14 @@ def monkeymodule():
 
 
 @pytest.fixture(scope='session')
-def patch_fernet_key(monkeysession):
-    monkeysession.setenv('ANONYMIZER_FERNET_KEY', Fernet.generate_new_key())
-
-
-@pytest.fixture(scope='session')
 def dags_path():
+    """Get the path to the dags directory."""
     return ROOT_DIR.joinpath('dags')
 
 
 @pytest.fixture
 def fixture_path():
+    """Get the absolute path to a fixture in tests/fixtures."""
     def get_path(fname=None):
         path = ROOT_DIR.joinpath('tests', 'fixtures')
         if fname:
@@ -69,7 +64,9 @@ def fixture_path():
 
 
 @pytest.fixture(scope='session')
-def dagbag(monkeysession):
+def dagbag():
+    """Return a dagbag object from airflow."""
+    # monkeysession.setenv('ANONYMIZER_FERNET_KEY', Fernet.generate_new_key())
     # import airflow here so envvar changed first
     from airflow.models import DagBag
     return DagBag(include_examples=False)

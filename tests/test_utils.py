@@ -3,7 +3,6 @@ import pytest
 from dag.utils.anonymize import Anonymizer
 
 
-@pytest.mark.usefixtures('patch_fernet_key')
 @pytest.mark.parametrize('value', [
     '123',
     b'123',
