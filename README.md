@@ -27,13 +27,7 @@
 │   └── tim_brazil.py
 ├── tests
 │   └── test_something.py
-├── .dockerignore
-├── .gitignore
-├── airflow.cfg
-├── CODEOWNERS
-├── conftest.py
-├── Jenkinsfile
+├── conftest.py  # global test fixtures
 ├── README.md
-├── requirements.txt
 └── setup.cfg
 ```

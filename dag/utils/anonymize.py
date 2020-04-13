@@ -4,6 +4,7 @@ We are using a version of fernet with rust bindings since it is much
 faster than the native python cryptography implementation.
 """
 import os
+from typing import Any
 
 from rfernet import Fernet
 
@@ -13,30 +14,30 @@ class Anonymizer:
 
     def __init__(self) -> None:
         """Init Anonymizer."""
-        key = os.getenv('FERNET_KEY')
+        key = os.getenv('ANONYMIZER_FERNET_KEY')
         assert key, "Anonymization key not found in environment"
         self._fernet = Fernet(key)
 
-    def encrypt(self, value: str) -> str:
+    def encrypt(self, value: Any) -> bytes:
         """Encrypt a string.
 
         Args:
-            value (str): The string to encrypt
+            value (Any): The string to encrypt
 
         Returns:
-            str: The encrypted string
+            bytes: The encrypted string
         """
-        # convert to str just in case
-        value = str(value)
+        value = str(value).encode()  # must be bytes
         return self._fernet.encrypt(value)
 
-    def decrypt(self, value: str) -> str:
+    def decrypt(self, value: bytes) -> bytes:
         """Decrypt an encrypted string.
 
         Args:
-            value (str): An encrypted string
+            value (bytes): An encrypted string
 
         Returns:
             str: The string decrypted
         """
-        return self._fernet.decrypt(value)
+        decrypted = self._fernet.decrypt(value)
+        return decrypted.decode()

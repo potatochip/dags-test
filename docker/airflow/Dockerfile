@@ -6,10 +6,13 @@ COPY ./requirements/prod.txt .
 RUN pip install --trusted-host pypi.python.org -r prod.txt
 
 COPY . .
-ENV PYTHONPATH "${PYTHONPATH}:/srv/dag:/srv/settings"
+ENV PYTHONPATH="${PYTHONPATH}:/srv/dag:/srv/settings" \
+    AIRFLOW_HOME="/srv"
 
 FROM builder as production
-ENV AIRFLOW__CORE__FERNET_KEY="eRF9oELwoZLMlJ2BXcCYBlaNUAEV0Ad8jM4POBcGqqc="
+# TODO: pass below from airflow secrets
+ENV FERNET_KEY="eRF9oELwoZLMlJ2BXcCYBlaNUAEV0Ad8jM4POBcGqqc=" \
+    SECRET_KEY="YiBMQxc9kGVNwhNVV9Ar"
 
 FROM builder as test
 COPY ./requirements/test.txt .
