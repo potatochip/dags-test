@@ -66,15 +66,18 @@ ENV PYTHONPATH="${PYTHONPATH}:/srv"
 
 
 FROM builder as production
+
 # TODO: pass below from k8s secrets
 ENV FERNET_KEY="eRF9oELwoZLMlJ2BXcCYBlaNUAEV0Ad8jM4POBcGqqc=" \
-    ANONYMIZER_FERNET_KEY="" \
-    SECRET_KEY="YiBMQxc9kGVNwhNVV9Ar"
+    ANONYMIZER_FERNET_KEY=""
+
 ENTRYPOINT ["/srv/entrypoint.sh"]
 CMD ["webserver"]
 
 
 FROM builder as test
+
 COPY ./docker/airflow/requirements/test.txt ./docker/operators/default/requirements.txt ./
 RUN pip install --trusted-host pypi.python.org -r test.txt -r requirements.txt
+
 ENTRYPOINT ["/bin/bash"]
