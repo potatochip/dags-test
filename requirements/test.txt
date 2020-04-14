@@ -1,4 +1,0 @@
--r prod.txt
-mypy
-pytest
-pytest-cov

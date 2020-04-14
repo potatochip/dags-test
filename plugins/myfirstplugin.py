@@ -1,1 +1,0 @@
-"""Plugin does something."""
