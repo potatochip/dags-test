@@ -70,7 +70,7 @@ FROM builder as production
 ENV FERNET_KEY="eRF9oELwoZLMlJ2BXcCYBlaNUAEV0Ad8jM4POBcGqqc=" \
     ANONYMIZER_FERNET_KEY="" \
     SECRET_KEY="YiBMQxc9kGVNwhNVV9Ar"
-ENTRYPOINT ["entrypoint.sh"]
+ENTRYPOINT ["/srv/entrypoint.sh"]
 CMD ["webserver"]
 
 
