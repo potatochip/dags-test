@@ -1,4 +1,4 @@
-import imp
+import importlib.util
 import os
 from collections import defaultdict
 
@@ -67,27 +67,28 @@ def test_alert_email_present(dags):
 
 class TestRawFiles:
     @pytest.fixture(scope='module')
-    def raw_dag_files(self, dags_path):
-        filenames = []
+    def raw_dags(self, this_repo):
+        dags_path = this_repo.joinpath('dags')
+        dags = []
         for region in dags_path.iterdir():
             for filename in region.glob('**/*.py'):
-                filenames.append((str(region), str(filename.resolve())))
-        return filenames
+                spec = importlib.util.spec_from_file_location('dag', filename)
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                dags.append((str(region), filename, module))
+        return dags
 
-
-    def test_dags_are_dags(self, raw_dag_files):
-        for region, fpath in raw_dag_files:
-            module = imp.load_source(region, fpath)
+    def test_dags_are_dags(self, raw_dags):
+        for _, fpath, module in raw_dags:
             msg = f"{fpath} missing dag"
             assert any(
                 isinstance(var, DAG)
                 for var in vars(module).values()
             ), msg
 
-    def test_dags_have_unique_ids(self, raw_dag_files):
+    def test_dags_have_unique_ids(self, raw_dags):
         seen_ids = defaultdict(dict)
-        for region, fpath in raw_dag_files:
-            module = imp.load_source(region, fpath)
+        for region, fpath, module in raw_dags:
             for var in vars(module).values():
                 if isinstance(var, DAG):
                     id_ = var.dag_id

@@ -8,7 +8,6 @@ pipeline {
         PROJECT = 'dags'
         CHANNEL = '#test-slack-notif'
         IMAGE = "juvo/${PROJECT}"
-        TEST_CONTAINER = "${PROJECT}_test"
     }
 
     agent {
@@ -39,31 +38,30 @@ pipeline {
         }
         stage('Build Test Container') {
             steps {
-                sh "docker build --target test -t ${IMAGE} -f docker/airflow/Dockerfile \\."
-                sh "docker run --name ${TEST_CONTAINER} -v ${WORKSPACE}:/srv -it -d ${IMAGE}"
-                sh "docker exec ${TEST_CONTAINER} airflow initdb"
+                sh "COMPOSE_DOCKER_CLI_BUILD=1 docker-compose build test"
+                sh "docker-compose up -d test"
             }
         }
         stage('Test') {
             parallel {
                 stage('Type Check Packages') {
                     steps {
-                        sh "docker exec ${TEST_CONTAINER} mypy -p dag --junit-xml reports/mypy_packages.xml"
+                        sh "docker-compose exec -T test mypy -p dag --junit-xml reports/mypy_packages.xml"
                     }
                 }
                 stage('Type Check Dags') {
                     steps {
-                        sh "docker exec ${TEST_CONTAINER} mypy --namespace-packages -p dags --junit-xml reports/mypy_dags.xml"
+                        sh "docker-compose exec -T test mypy --namespace-packages -p dags --junit-xml reports/mypy_dags.xml"
                     }
                 }
                 stage('Type Check Plugins') {
                     steps {
-                        sh "docker exec ${TEST_CONTAINER} mypy --namespace-packages -p plugins --junit-xml reports/mypy_plugins.xml"
+                        sh "docker-compose exec -T test mypy --namespace-packages -p plugins --junit-xml reports/mypy_plugins.xml"
                     }
                 }
                 stage('Test') {
                     steps {
-                        sh "docker exec ${TEST_CONTAINER} pytest --junitxml=reports/nosetests.xml --cov --cov-report=xml:reports/coverage.xml --cov-report=html:reports/coverage.html"
+                        sh "docker-compose exec -T test pytest --junitxml=reports/nosetests.xml --cov --cov-report=xml:reports/coverage.xml --cov-report=html:reports/coverage.html"
                     }
                 }
             }
@@ -96,7 +94,7 @@ pipeline {
 
     post {
         always {
-            sh "docker rm --force ${TEST_CONTAINER}"
+            sh "docker-compose down --remove-orphans"
             archiveArtifacts artifacts: 'reports/*', fingerprint: true
             junit 'reports/*.xml'
         }
