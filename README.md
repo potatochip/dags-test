@@ -44,4 +44,4 @@ Changes to the codebase should be reflected in the UI and scheduler without need
 
 You can run the test suite with `pytest` after installing the requirements in the root directory.
 
-As an alternative, you can use the command `docker-compose run --rm dev` and the tests will run the container and will automatically rerun every time you save a change to the codebase.
+As an alternative, you can use the command `docker-compose run --rm dev` and the tests will run in a container and will automatically rerun every time you save a change to the codebase.
