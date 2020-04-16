@@ -47,9 +47,9 @@ def monkeymodule():
 
 
 @pytest.fixture(scope='session')
-def dags_path():
-    """Get the path to the dags directory."""
-    return ROOT_DIR.joinpath('dags')
+def this_repo():
+    """Get the root directory path for this repo."""
+    return ROOT_DIR
 
 
 @pytest.fixture
@@ -59,14 +59,13 @@ def fixture_path():
         path = ROOT_DIR.joinpath('tests', 'fixtures')
         if fname:
             path = path.joinpath(fname)
-        return path.resolve()
+        return path
     return get_path
 
 
 @pytest.fixture(scope='session')
 def dagbag():
     """Return a dagbag object from airflow."""
-    # monkeysession.setenv('ANONYMIZER_FERNET_KEY', Fernet.generate_new_key())
     # import airflow here so envvar changed first
     from airflow.models import DagBag
     return DagBag(include_examples=False)

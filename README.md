@@ -2,7 +2,7 @@
 
 ## Table of contents
 
-```
+``` shell
 .
 ├── dag  # package for dag-related code
 │   ├── tasks  # common or carrier-specific task logic
@@ -31,3 +31,17 @@
 ├── README.md
 └── setup.cfg
 ```
+
+## Development
+
+### Run Airflow Locally
+
+Use `docker-compose up airflow` to run those airflow components locally. View the UI at `http://localhost:8080`. Run `docker-compose down` when you are finished.
+
+Changes to the codebase should be reflected in the UI and scheduler without needing to restart.
+
+### Testing
+
+You can run the test suite with `pytest` after installing the requirements in the root directory.
+
+As an alternative, you can use the command `docker-compose run --rm dev` and the tests will run the container and will automatically rerun every time you save a change to the codebase.

@@ -3,8 +3,8 @@ FROM python:3.7-slim-buster as builder
 WORKDIR /srv
 
 # Airflow
-ARG AIRFLOW_VERSION=1.10.9
-ENV AIRFLOW_HOME=/srv
+ARG AIRFLOW_VERSION=1.10.10
+ENV AIRFLOW_CONFIG /srv/airflow.cfg
 
 # Define en_US.
 ENV LANGUAGE en_US.UTF-8
@@ -56,28 +56,30 @@ RUN set -ex \
         /usr/share/doc \
         /usr/share/doc-base
 
-EXPOSE 8080 5555 8793
-
 COPY ./docker/airflow/requirements/prod.txt .
 RUN pip install --trusted-host pypi.python.org -r prod.txt
 
 COPY . .
 ENV PYTHONPATH="${PYTHONPATH}:/srv"
 
+EXPOSE 8080 5555 8793
+
 
 FROM builder as production
-
 # TODO: pass below from k8s secrets
 ENV FERNET_KEY="eRF9oELwoZLMlJ2BXcCYBlaNUAEV0Ad8jM4POBcGqqc=" \
     ANONYMIZER_FERNET_KEY=""
-
 ENTRYPOINT ["/srv/entrypoint.sh"]
 CMD ["webserver"]
 
 
 FROM builder as test
-
 COPY ./docker/airflow/requirements/test.txt ./docker/operators/default/requirements.txt ./
 RUN pip install --trusted-host pypi.python.org -r test.txt -r requirements.txt
-
+RUN airflow initdb
 ENTRYPOINT ["/bin/bash"]
+
+
+FROM test as dev
+COPY ./docker/airflow/requirements/dev.txt .
+RUN pip install --trusted-host pypi.python.org -r dev.txt

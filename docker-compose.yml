@@ -1,0 +1,51 @@
+---
+version: "3.7"
+services:
+  postgres:
+    image: postgres:9.6
+    cap_add:
+      - IPC_LOCK
+    privileged: true
+    restart: always
+    ports:
+      - 5432:5432
+    environment:
+      - POSTGRES_USER=airflow
+      - POSTGRES_PASSWORD=airflow
+      - POSTGRES_DB=airflow
+  airflow:
+    build:
+      context: .
+      dockerfile: docker/airflow/Dockerfile
+      target: production
+    restart: always
+    depends_on:
+      - postgres
+    volumes:
+      - .:/srv
+    command: webserver
+    ports:
+      - 8080:8080
+    healthcheck:
+      test: ["CMD-SHELL", "[ -f /root/airflow/airflow-webserver.pid ]"]
+      interval: 30s
+      timeout: 30s
+      retries: 3
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+  test:
+    build:
+      context: .
+      dockerfile: docker/airflow/Dockerfile
+      target: test
+    volumes:
+      - .:/srv
+    stdin_open: true
+  dev:
+    build:
+      context: .
+      dockerfile: docker/airflow/Dockerfile
+      target: dev
+    volumes:
+      - .:/srv
+    entrypoint: watchmedo auto-restart --recursive --pattern="*.py" --directory="." -- pytest -p no:warnings --cov
