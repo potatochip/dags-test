@@ -9,6 +9,8 @@ from pathlib import Path
 
 import pytest
 from _pytest.monkeypatch import MonkeyPatch
+from botocore.stub import Stubber
+from utils.aws.s3 import CLIENT
 
 THIS_FILE = Path(__file__).resolve()
 ROOT_DIR = THIS_FILE.parent
@@ -83,3 +85,21 @@ def disable_airflow_logger():
     logger.disabled = True
     yield
     logger.disabled = False
+
+
+@pytest.fixture(autouse=True)
+def s3_stub():
+    """Mock connection to s3.
+
+    The fixture should be called with something like:
+    ```
+    s3_stub.add_response(
+        'head_object',
+        expected_params={'Bucket': 'example-bucket', 'Key': 'foobar'},
+        service_response={},
+    )
+    ```
+    """
+    with Stubber(CLIENT) as stubber:
+        yield stubber
+        stubber.assert_no_pending_responses()

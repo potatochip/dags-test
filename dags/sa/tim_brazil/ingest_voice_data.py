@@ -1,5 +1,7 @@
 """Ingests raw voice data files from TIM Brazil.
 
+This anonymizes the following fields:
+
 Frequency: Daily incremental extraction.
 
 Inputs:
@@ -12,7 +14,6 @@ Alerts:
     airflow@juvo.com
 """
 from datetime import timedelta
-from pathlib import Path
 
 from airflow import DAG
 from airflow.operators.ingestion import IngestPIIOperator
@@ -37,7 +38,6 @@ default_args = {
 dag = DAG('tim_brazil.ingest_voice_data',
           default_args=default_args)
 
-PREFIX = 'voice/ocs_file_{{ ds }}.csv'  # TODO: fix me
 
 
 def transform_dataframe(df):
@@ -62,8 +62,9 @@ def transform_dataframe(df):
 
 ingest = IngestPIIOperator(
     task_id='ingest',
-    input_path=Path('s3://', tim_brazil.RAW_CARRIER_BUCKET, PREFIX),
-    output_path=Path('s3://', tim_brazil.ANONYMIZED_CARRIER_BUCKET, PREFIX),
+    key_pattern=r'voice/ocs_file_{{ ds }}.csv',  # TODO: correct me
+    input_path=tim_brazil.RAW_CARRIER_BUCKET,
+    output_path=tim_brazil.ANONYMIZED_CARRIER_BUCKET,
     pii_columns=['MSISDN_A', 'MSISDN_B'],
     transform_func=transform_dataframe,
     csv_kwargs=dict(delimiter=';')

@@ -1,6 +1,7 @@
 import tempfile
 from datetime import datetime
 from io import BytesIO
+from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -29,7 +30,18 @@ def csv_file(columns, data):
 
 
 class TestIngestion:
-    def test_pii_ingestion(self):
+    @pytest.mark.parametrize('path', [
+        's3://bucket/prefix',
+        's3://bucket',
+        'bucket',
+    ])
+    @pytest.mark.parametrize('as_path', [True, False])
+    def test_pii_ingestion(self, path, as_path, s3_stub):
+        s3_stub.add_response(
+            'list_objects',
+            # expected_params={'Bucket': 'bucket', 'Prefix': ''},
+            service_response={'Contents': [{'Key': 'cats.csv'}]},
+        )
         msisdn = 123
         in_file = csv_file(columns=['msisdn', 'pet'],
                            data=[[msisdn, 'cat']])
@@ -38,12 +50,14 @@ class TestIngestion:
             df['callback_column'] = True
             return df
 
+        path = Path(path) if as_path else path
         with tempfile.NamedTemporaryFile() as tmp:
             run_operator(
                 IngestPIIOperator(
                     task_id='ingest',
-                    input_path=in_file,
-                    output_path=tmp.name,
+                    key_pattern=r'second-prefix/cats.csv',
+                    input_path=path,
+                    output_path=path,
                     pii_columns=['msisdn'],
                     transform_func=callback
                 )
@@ -55,3 +69,5 @@ class TestIngestion:
         assert df.columns.tolist() == [
             'msisdn', 'pet', 'execution_date', 'callback_column'
         ]
+
+# todo: test empty pii file

@@ -4,9 +4,6 @@
 
 ``` shell
 .
-├── dag  # package for dag-related code
-│   ├── tasks  # common or carrier-specific task logic
-│   ├── utils  # common utilities
 ├── dags  # dag definitions separated by region/carrier
 │   └── sa  # region
 │       └── tim_brazil  # carrier
@@ -25,8 +22,10 @@
 ├── settings  # package defining constant values for carriers, etc
 │   ├── __init__.py
 │   └── tim_brazil.py
+├── tasks  # package for separating business logic from dag logic
 ├── tests
 │   └── test_something.py
+├── utils  # package for common utility functions
 ├── conftest.py  # global test fixtures
 ├── README.md
 └── setup.cfg

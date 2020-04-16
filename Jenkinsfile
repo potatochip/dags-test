@@ -46,7 +46,9 @@ pipeline {
             parallel {
                 stage('Type Check Packages') {
                     steps {
-                        sh "docker-compose exec -T test mypy -p dag --junit-xml reports/mypy_packages.xml"
+                        sh "docker-compose exec -T test mypy -p settings --junit-xml reports/mypy_settings.xml"
+                        sh "docker-compose exec -T test mypy -p tasks --junit-xml reports/mypy_tasks.xml"
+                        sh "docker-compose exec -T test mypy -p utils --junit-xml reports/mypy_utils.xml"
                     }
                 }
                 stage('Type Check Dags') {

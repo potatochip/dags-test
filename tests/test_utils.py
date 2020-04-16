@@ -1,6 +1,6 @@
 import pytest
 
-from dag.utils.anonymize import Anonymizer
+from utils.anonymize import Anonymizer
 
 
 @pytest.mark.parametrize('value', [
