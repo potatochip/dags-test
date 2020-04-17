@@ -1,10 +1,13 @@
 """S3-related utility functions."""
+import os
 from functools import wraps
 from pathlib import Path
-from typing import Any, Callable, Generator, Union
+from typing import Any, Callable, Generator
 
 import boto3
+import smart_open
 
+_ENDPOINT_URL = os.getenv('AWS_ENDPOINT_URL')
 _CLIENT = None
 
 
@@ -12,7 +15,7 @@ def get_client() -> boto3.client:
     """Get a client for s3."""
     global _CLIENT
     if _CLIENT is None:
-        _CLIENT = boto3.client('s3')
+        _CLIENT = boto3.client('s3', endpoint_url=_ENDPOINT_URL)
     return _CLIENT
 
 
@@ -34,6 +37,21 @@ def parse_path(func: Callable[[str, str], Any]) -> Callable:
             parsed_prefix = '/'.join(parsed_prefix) if parsed_prefix else None
         return func(bucket or parsed_bucket, prefix or parsed_prefix, **kwargs)  # type: ignore
     return wrapper
+
+
+
+def open_s3(uri, *args, **kwargs) -> smart_open.open:
+    """Stream an s3 url for read / write operations.
+
+    This is a wrapper around smart_open.open which allows us to fine-tune
+    access control for testing.
+    """
+    transport_params = {
+        'resource_kwargs': {
+            'endpoint_url': _ENDPOINT_URL,
+        }
+    }
+    return smart_open.open(uri, transport_params=transport_params, *args, **kwargs)
 
 
 @parse_path

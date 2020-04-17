@@ -12,6 +12,8 @@ import boto3
 import pytest
 from _pytest.monkeypatch import MonkeyPatch
 
+from utils.aws.s3 import get_client
+
 THIS_FILE = Path(__file__).resolve()
 ROOT_DIR = THIS_FILE.parent
 
@@ -84,14 +86,15 @@ def disable_airflow_logger():
 
 @pytest.fixture(scope='session', autouse=True)
 def mock_aws(monkeysession):
-    monkeysession.setattr(boto3.Session, 'client', partialmethod(boto3.Session.client, endpoint_url='http://aws:4566'))
-    monkeysession.setattr(boto3.Session, 'resource', partialmethod(boto3.Session.resource, endpoint_url='http://aws:4566'))
+    # monkeysession.setenv('AWS_ENDPOINT_URL', 'http://aws/4566')
+    # monkeysession.setattr(boto3.Session, 'client', partialmethod(boto3.Session.client, endpoint_url='http://aws:4566'))
+    # monkeysession.setattr(boto3.Session, 'resource', partialmethod(boto3.Session.resource, endpoint_url='http://aws:4566'))
 
     _populate_s3()
 
 
 def _populate_s3():
-    client = boto3.client('s3')
+    client = get_client()
     path = ROOT_DIR.joinpath('tests', 'fixtures', 's3')
     for f in path.rglob('*'):
         bucket, *key = f.relative_to(path).parts

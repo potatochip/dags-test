@@ -4,13 +4,12 @@ from io import BytesIO
 
 import pandas as pd
 import pytest
-import smart_open
 from airflow import DAG
 from airflow.models import TaskInstance
 from airflow.operators.ingestion import IngestPIIOperator
 from airflow.utils.state import State
 
-from utils.aws.s3 import get_client
+from utils.aws.s3 import get_client, open_s3
 
 DEFAULT_DATE = datetime(2020, 4, 1)
 
@@ -45,7 +44,7 @@ class TestIngestion:
                 transform_func=callback
             )
         )
-        df = pd.read_csv(smart_open.open('s3://out/prefix/key.csv'))
+        df = pd.read_csv(open_s3('s3://out/prefix/key.csv'))
 
         assert df.msisdn[0] not in {'123', 123}
         assert df.shape == (1, 4)
@@ -69,6 +68,9 @@ class TestIngestion:
         assert 'Contents' in response
 
 
+
 # todo: use localstack when interacting with local airflow ui
+
+# TODO: populate aws with docker volume instead of fixture
 
 # todo: test actual dag

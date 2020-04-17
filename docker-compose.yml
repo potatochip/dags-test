@@ -40,6 +40,7 @@ services:
       retries: 3
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AWS_ENDPOINT_URL=http://aws:4566
   ci:
     build:
       context: .
@@ -50,6 +51,8 @@ services:
     volumes:
       - .:/srv
     stdin_open: true
+    environment:
+      - AWS_ENDPOINT_URL=http://aws:4566
   dev:
     build:
       context: .
@@ -60,3 +63,5 @@ services:
     volumes:
       - .:/srv
     entrypoint: watchmedo auto-restart --recursive --pattern="*.py" --directory="." -- pytest --cov
+    environment:
+      - AWS_ENDPOINT_URL=http://aws:4566

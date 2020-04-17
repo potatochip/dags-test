@@ -8,10 +8,9 @@ import pandas as pd
 from airflow.models import BaseOperator
 from airflow.plugins_manager import AirflowPlugin
 from airflow.utils.decorators import apply_defaults
-from smart_open import open
 
 from utils.anonymize import Anonymizer
-from utils.aws.s3 import iter_keys
+from utils.aws.s3 import iter_keys, open_s3
 
 
 def s3_path(path):
@@ -79,9 +78,9 @@ class IngestPIIOperator(BaseOperator):
         input_path = os.path.join(self.input_path, fname)
         output_path = os.path.join(self.output_path, fname)
         # read the s3 file as a series of streamed dataframes
-        reader = pd.read_csv(open(input_path), chunksize=100000, **self.csv_kwargs)
+        reader = pd.read_csv(open_s3(input_path), chunksize=100000, **self.csv_kwargs)
         # write the new file as a multipart stream to s3
-        with open(output_path, 'w') as f:
+        with open_s3(output_path, 'w') as f:
             df = next(reader)
             df = self._transform(df, execution_date)
             # write the first chunk with the csv header
