@@ -13,6 +13,12 @@ services:
       - POSTGRES_USER=airflow
       - POSTGRES_PASSWORD=airflow
       - POSTGRES_DB=airflow
+  aws:
+    image: localstack/localstack
+    ports:
+      - 4566:4566
+    environment:
+      - SERVICES=s3
   airflow:
     build:
       context: .
@@ -21,6 +27,7 @@ services:
     restart: always
     depends_on:
       - postgres
+      - aws
     volumes:
       - .:/srv
     command: webserver
@@ -33,11 +40,13 @@ services:
       retries: 3
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
-  test:
+  ci:
     build:
       context: .
       dockerfile: docker/airflow/Dockerfile
       target: test
+    depends_on:
+      - aws
     volumes:
       - .:/srv
     stdin_open: true
@@ -46,6 +55,8 @@ services:
       context: .
       dockerfile: docker/airflow/Dockerfile
       target: dev
+    depends_on:
+      - aws
     volumes:
       - .:/srv
-    entrypoint: watchmedo auto-restart --recursive --pattern="*.py" --directory="." -- pytest -p no:warnings --cov
+    entrypoint: watchmedo auto-restart --recursive --pattern="*.py" --directory="." -- pytest --cov

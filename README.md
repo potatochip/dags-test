@@ -39,8 +39,10 @@ Use `docker-compose up airflow` to run those airflow components locally. View th
 
 Changes to the codebase should be reflected in the UI and scheduler without needing to restart.
 
+Any changes to requirements files will necessitate runing `docker-compose build airflow`.
+
 ### Testing
 
-You can run the test suite with `pytest` after installing the requirements in the root directory.
+Test using `./test.sh`. The tests will automatically rerun every time you save a change to the codebase. `ctrl+c` to exit.
 
-As an alternative, you can use the command `docker-compose run --rm dev` and the tests will run in a container and will automatically rerun every time you save a change to the codebase.
+Any changes to requirements files will necessitate runing `docker-compose build dev`.

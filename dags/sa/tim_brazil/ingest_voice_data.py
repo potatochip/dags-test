@@ -39,7 +39,6 @@ dag = DAG('tim_brazil.ingest_voice_data',
           default_args=default_args)
 
 
-
 def transform_dataframe(df):
     """Transform dataframe.
 

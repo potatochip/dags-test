@@ -5,12 +5,12 @@ should be added to path for use within test files.
 """
 import logging
 import os
+from functools import partialmethod
 from pathlib import Path
 
+import boto3
 import pytest
 from _pytest.monkeypatch import MonkeyPatch
-from botocore.stub import Stubber
-from utils.aws.s3 import CLIENT
 
 THIS_FILE = Path(__file__).resolve()
 ROOT_DIR = THIS_FILE.parent
@@ -25,6 +25,12 @@ TEST_FERNET_KEY = 'TRSq95QF5Pj9ldN002l0GgLX3ze-d92ZSZAmz3pd4wY='
 ENV['FERNET_KEY'] = TEST_FERNET_KEY
 ENV['ANONYMIZER_FERNET_KEY'] = TEST_FERNET_KEY
 ENV['ANONYMIZER_SALT'] = 'pepper'
+
+# prevent using real account just in case
+ENV['AWS_ACCESS_KEY_ID'] = 'testing'
+ENV['AWS_SECRET_ACCESS_KEY'] = 'testing'
+ENV['AWS_SECURITY_TOKEN'] = 'testing'
+ENV['AWS_SESSION_TOKEN'] = 'testing'
 
 
 @pytest.fixture(scope='session')
@@ -55,17 +61,6 @@ def this_repo():
     return ROOT_DIR
 
 
-@pytest.fixture
-def fixture_path():
-    """Get the absolute path to a fixture in tests/fixtures."""
-    def get_path(fname=None):
-        path = ROOT_DIR.joinpath('tests', 'fixtures')
-        if fname:
-            path = path.joinpath(fname)
-        return path
-    return get_path
-
-
 @pytest.fixture(scope='session')
 def dagbag():
     """Return a dagbag object from airflow."""
@@ -87,19 +82,20 @@ def disable_airflow_logger():
     logger.disabled = False
 
 
-@pytest.fixture(autouse=True)
-def s3_stub():
-    """Mock connection to s3.
+@pytest.fixture(scope='session', autouse=True)
+def mock_aws(monkeysession):
+    monkeysession.setattr(boto3.Session, 'client', partialmethod(boto3.Session.client, endpoint_url='http://aws:4566'))
+    monkeysession.setattr(boto3.Session, 'resource', partialmethod(boto3.Session.resource, endpoint_url='http://aws:4566'))
 
-    The fixture should be called with something like:
-    ```
-    s3_stub.add_response(
-        'head_object',
-        expected_params={'Bucket': 'example-bucket', 'Key': 'foobar'},
-        service_response={},
-    )
-    ```
-    """
-    with Stubber(CLIENT) as stubber:
-        yield stubber
-        stubber.assert_no_pending_responses()
+    _populate_s3()
+
+
+def _populate_s3():
+    client = boto3.client('s3')
+    path = ROOT_DIR.joinpath('tests', 'fixtures', 's3')
+    for f in path.rglob('*'):
+        bucket, *key = f.relative_to(path).parts
+        if f.is_dir():
+            client.create_bucket(Bucket=bucket)
+            continue
+        client.upload_file(str(f.resolve()), bucket, '/'.join(key))
