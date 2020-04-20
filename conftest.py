@@ -32,6 +32,8 @@ ENV['AWS_SECRET_ACCESS_KEY'] = 'testing'
 ENV['AWS_SECURITY_TOKEN'] = 'testing'
 ENV['AWS_SESSION_TOKEN'] = 'testing'
 
+_S3_BUCKETS = set()
+
 
 @pytest.fixture(scope='session')
 def monkeysession():
@@ -97,14 +99,22 @@ def populate_s3():
         included_paths = [Path(i) for i in paths]
         path = ROOT_DIR.joinpath('tests', 'fixtures', 's3')
         s3 = get_s3()
+        emptied_buckets = set()
         for f in path.rglob('*'):
             relative_path = f.relative_to(path)
-            if not any(p in relative_path.parents or p == relative_path for p in included_paths):
+            if included_paths and not any(
+                p in relative_path.parents or p == relative_path
+                for p in included_paths
+            ):
                 continue
             bucket, *key = relative_path.parts
             bucket = s3.Bucket(bucket)
-            bucket.create()
-            bucket.objects.delete()
+            if bucket not in _S3_BUCKETS:
+                bucket.create()
+                _S3_BUCKETS.add(bucket)
+            if bucket not in emptied_buckets:
+                bucket.objects.delete()
+                emptied_buckets.add(bucket)
             if f.is_file():
                 bucket.upload_file(
                     Filename=str(f.resolve()),

@@ -65,6 +65,11 @@ pipeline {
                     steps {
                         sh "docker-compose exec -T ci pytest --junitxml=reports/nosetests.xml --cov --cov-report=xml:reports/coverage.xml --cov-report=html:reports/coverage.html"
                     }
+                    post {
+                        failure {
+                            sh "docker-compose logs > reports/docker-compose.log"
+                        }
+                    }
                 }
             }
         }

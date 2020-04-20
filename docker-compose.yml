@@ -23,6 +23,10 @@ services:
       - SERVICES=s3
       - START_WEB=0
       - SKIP_BOOTSTRAP
+    healthcheck:
+      test: awslocal s3 ls
+      interval: 3s
+      timeout: 10s
   airflow:
     build:
       context: .
