@@ -5,14 +5,12 @@ should be added to path for use within test files.
 """
 import logging
 import os
-from functools import partialmethod
 from pathlib import Path
 
-import boto3
 import pytest
 from _pytest.monkeypatch import MonkeyPatch
 
-from utils.aws.s3 import get_client
+from utils.aws.s3 import get_s3
 
 THIS_FILE = Path(__file__).resolve()
 ROOT_DIR = THIS_FILE.parent
@@ -84,21 +82,33 @@ def disable_airflow_logger():
     logger.disabled = False
 
 
-@pytest.fixture(scope='session', autouse=True)
-def mock_aws(monkeysession):
-    # monkeysession.setenv('AWS_ENDPOINT_URL', 'http://aws/4566')
-    # monkeysession.setattr(boto3.Session, 'client', partialmethod(boto3.Session.client, endpoint_url='http://aws:4566'))
-    # monkeysession.setattr(boto3.Session, 'resource', partialmethod(boto3.Session.resource, endpoint_url='http://aws:4566'))
+@pytest.fixture
+def populate_s3():
+    """Populate s3 files in the mocked aws.
 
-    _populate_s3()
+    This should be run every time a specific fixture is necessary
+    to ensure that no artifacts remain from previous tests.
+    """
+    def populate(*paths):
+        """Populate s3 files for passed paths.
 
-
-def _populate_s3():
-    client = get_client()
-    path = ROOT_DIR.joinpath('tests', 'fixtures', 's3')
-    for f in path.rglob('*'):
-        bucket, *key = f.relative_to(path).parts
-        if f.is_dir():
-            client.create_bucket(Bucket=bucket)
-            continue
-        client.upload_file(str(f.resolve()), bucket, '/'.join(key))
+        If no paths are passed then populates all files.
+        """
+        included_paths = [Path(i) for i in paths]
+        path = ROOT_DIR.joinpath('tests', 'fixtures', 's3')
+        s3 = get_s3()
+        for f in path.rglob('*'):
+            relative_path = f.relative_to(path)
+            if not any(p in relative_path.parents or p == relative_path for p in included_paths):
+                continue
+            bucket, *key = relative_path.parts
+            bucket = s3.Bucket(bucket)
+            bucket.create()
+            bucket.objects.delete()
+            if f.is_file():
+                bucket.upload_file(
+                    Filename=str(f.resolve()),
+                    Key='/'.join(key),
+                    ExtraArgs={'ServerSideEncryption': 'AES256'}
+                )
+    return populate

@@ -14,11 +14,15 @@ services:
       - POSTGRES_PASSWORD=airflow
       - POSTGRES_DB=airflow
   aws:
-    image: localstack/localstack
+    image: localstack/localstack:0.11.0
     ports:
       - 4566:4566
+    volumes:
+      - ./tests/fixtures:/docker-entrypoint-initaws.d:ro
     environment:
       - SERVICES=s3
+      - START_WEB=0
+      - SKIP_BOOTSTRAP
   airflow:
     build:
       context: .

@@ -13,7 +13,7 @@ from utils.anonymize import Anonymizer
 from utils.aws.s3 import iter_keys, open_s3
 
 
-def s3_path(path):
+def _s3_path(path: str) -> str:
     if not path.startswith('s3://'):
         return 's3://' + path
     return path
@@ -24,6 +24,10 @@ class IngestPIIOperator(BaseOperator):
 
     This reads a csv and writes an anonymized and optionally transformed
     version of it to our public path.
+
+    Note: Beyond matching filenames, they key_pattern is also used for
+    writing. So if it is declared with a prefix then that prefix is also
+    used when writing the new file to s3.
 
     The execution date is automatically appended to the file.
     """
@@ -57,8 +61,8 @@ class IngestPIIOperator(BaseOperator):
         """
         super().__init__(**kwargs)
         self.key_pattern = key_pattern
-        self.input_path = s3_path(input_path)
-        self.output_path = s3_path(output_path)
+        self.input_path = _s3_path(input_path)
+        self.output_path = _s3_path(output_path)
         self.pii_columns = pii_columns or []
         self.transform_func = transform_func or (lambda df: df)
         self.csv_kwargs = csv_kwargs or {}
@@ -69,16 +73,21 @@ class IngestPIIOperator(BaseOperator):
         # initialize anonymizer here so can create dags without failure due to no key
         self._anonymizer = Anonymizer()
         is_target_file = re.compile(self.key_pattern, re.I).match
-        for fname in iter_keys(path=self.input_path):
-            if is_target_file(fname):
-                self._ingest_file(fname, context['execution_date'])
+        for key in iter_keys(path=self.input_path):
+            if is_target_file(key):
+                self._ingest_file(key, context['execution_date'])
         self.log.info("Done")
 
     def _ingest_file(self, fname: str, execution_date: datetime) -> None:
         input_path = os.path.join(self.input_path, fname)
         output_path = os.path.join(self.output_path, fname)
         # read the s3 file as a series of streamed dataframes
-        reader = pd.read_csv(open_s3(input_path), chunksize=100000, **self.csv_kwargs)
+        try:
+            reader = pd.read_csv(open_s3(input_path), chunksize=100000, **self.csv_kwargs)
+        except pd.errors.EmptyDataError:
+            self.log.warning('%s is empty', fname)
+            reader = iter([pd.DataFrame()])
+
         # write the new file as a multipart stream to s3
         with open_s3(output_path, 'w') as f:
             df = next(reader)

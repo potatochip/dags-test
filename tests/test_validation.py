@@ -1,7 +1,7 @@
 import importlib.util
 import os
 from collections import defaultdict
-
+from pathlib import Path
 import pytest
 from airflow import DAG
 
@@ -63,6 +63,11 @@ def test_alert_email_present(dags):
             emails = dag.default_args.get('email', [])
             msg = 'Alert email not set for DAG {id}'.format(id=dag.dag_id)
             assert 'airflow@juvo.com' in emails, msg
+
+
+def test_at_least_one_task(dags):
+    for dag in dags:
+        assert len(dag.tasks) == 1, dag
 
 
 class TestRawFiles:

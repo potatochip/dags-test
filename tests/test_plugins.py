@@ -23,13 +23,15 @@ def run_operator(operator):
 
 
 class TestIngestion:
-    @pytest.mark.parametrize('path, pattern', [
-        ('s3://bucket/prefix', r'key.csv'),
-        ('bucket/prefix', r'key.csv'),
-        ('s3://bucket', r'prefix/key.csv'),
-        ('bucket', r'prefix/key.csv'),
+    @pytest.mark.parametrize('path, pattern, expected_out', [
+        ('s3://bucket/prefix/', r'key.csv', 's3://out/key.csv'),
+        ('bucket/prefix/', r'key.csv', 's3://out/key.csv'),
+        ('s3://bucket/', r'prefix/key.csv', 's3://out/prefix/key.csv'),
+        ('bucket/', r'prefix/key.csv', 's3://out/prefix/key.csv'),
     ])
-    def test_pii_ingestion(self, path, pattern):
+    def test_pii_ingestion(self, path, pattern, expected_out, populate_s3):
+        populate_s3('bucket/prefix/key.csv', 'out/')
+
         def callback(df):
             df['callback_column'] = True
             return df
@@ -44,7 +46,8 @@ class TestIngestion:
                 transform_func=callback
             )
         )
-        df = pd.read_csv(open_s3('s3://out/prefix/key.csv'))
+        s3 = get_client()
+        df = pd.read_csv(open_s3(expected_out))
 
         assert df.msisdn[0] not in {'123', 123}
         assert df.shape == (1, 4)
@@ -52,25 +55,18 @@ class TestIngestion:
             'msisdn', 'pet', 'execution_date', 'callback_column'
         ]
 
-    def test_pii_ingest_empty_file(self):
+    def test_pii_ingest_empty_file(self, populate_s3):
+        populate_s3('bucket/empty.csv', 'out/')
+
         run_operator(
             IngestPIIOperator(
                 task_id='ingest',
                 key_pattern=r'empty.csv',
-                input_path='bucket/prefix',
+                input_path='bucket',
                 output_path='out',
-                pii_columns=['msisdn'],
-                transform_func=lambda df: df
+                pii_columns=[]
             )
         )
         s3 = get_client()
-        response = s3.list_objects(Bucket='bucket', Prefix='prefix/empty.csv')
+        response = s3.list_objects(Bucket='out', Prefix='empty.csv')
         assert 'Contents' in response
-
-
-
-# todo: use localstack when interacting with local airflow ui
-
-# TODO: populate aws with docker volume instead of fixture
-
-# todo: test actual dag

@@ -39,7 +39,7 @@ pipeline {
         stage('Build Test Container') {
             steps {
                 sh "COMPOSE_DOCKER_CLI_BUILD=1 docker-compose build ci"
-                sh "docker-compose up -d ci"
+                sh "SKIP_BOOTSTRAP=1 docker-compose up -d ci"
             }
         }
         stage('Test') {
@@ -96,7 +96,7 @@ pipeline {
 
     post {
         always {
-            sh "docker-compose down --remove-orphans"
+            sh "docker-compose down --remove-orphans -t 1"
             archiveArtifacts artifacts: 'reports/*', fingerprint: true
             junit 'reports/*.xml'
         }

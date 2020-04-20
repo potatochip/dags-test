@@ -6,7 +6,7 @@
 .
 ├── dags  # dag definitions separated by region/carrier
 │   └── sa  # region
-│       └── tim_brazil  # carrier
+│       └── timbrazil  # carrier
 │           └── ingest_voice_data.py
 ├── docker  # requirements and dockerfile definitions
 │   ├── airflow  # the main container for airflow
@@ -21,7 +21,7 @@
 │   └── myfirstplugin.py
 ├── settings  # package defining constant values for carriers, etc
 │   ├── __init__.py
-│   └── tim_brazil.py
+│   └── timbrazil.py
 ├── tasks  # package for separating business logic from dag logic
 ├── tests
 │   └── test_something.py
