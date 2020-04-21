@@ -33,6 +33,12 @@
 
 ## Development
 
+## Fixtures
+
+The directory at tests/fixtures is used to create fixtures that exist for tests and dev airflow.
+
+You can create an empty directory as a bucket in s3. However, git ignores empty directories so you must create some sort of empty file in it to have it added to version control. An empty `.gitignore` works well for this purpose.
+
 ### Run Airflow Locally
 
 Use `docker-compose up airflow` to run those airflow components locally. View the UI at `http://localhost:8080`. Run `docker-compose down` when you are finished.
@@ -45,4 +51,4 @@ Any changes to requirements files will necessitate runing `docker-compose build 
 
 Test using `./test.sh`. The tests will automatically rerun every time you save a change to the codebase. `ctrl+c` to exit.
 
-Any changes to requirements files will necessitate runing `docker-compose build dev`.
+You can also run tests directly with `pytest` after installing the root requirements.txt and running `airflow initdb`.

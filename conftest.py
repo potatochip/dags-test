@@ -9,8 +9,9 @@ from pathlib import Path
 
 import pytest
 from _pytest.monkeypatch import MonkeyPatch
+from moto import mock_s3
 
-from utils.aws.s3 import get_s3
+from utils.aws.s3 import get_client
 
 THIS_FILE = Path(__file__).resolve()
 ROOT_DIR = THIS_FILE.parent
@@ -31,8 +32,6 @@ ENV['AWS_ACCESS_KEY_ID'] = 'testing'
 ENV['AWS_SECRET_ACCESS_KEY'] = 'testing'
 ENV['AWS_SECURITY_TOKEN'] = 'testing'
 ENV['AWS_SESSION_TOKEN'] = 'testing'
-
-_S3_BUCKETS = set()
 
 
 @pytest.fixture(scope='session')
@@ -88,9 +87,16 @@ def disable_airflow_logger():
 def populate_s3():
     """Populate s3 files in the mocked aws.
 
-    This should be run every time a specific fixture is necessary
-    to ensure that no artifacts remain from previous tests.
+    We are using moto directly here instead of going through localstack
+    since going over api is too slow and using the localstack infra
+    directly requires dealing with npm.
     """
+    mock = mock_s3()
+    mock.start()
+
+    client = get_client()
+    s3_bucket_exists_waiter = client.get_waiter('bucket_exists')
+
     def populate(*paths):
         """Populate s3 files for passed paths.
 
@@ -98,8 +104,6 @@ def populate_s3():
         """
         included_paths = [Path(i) for i in paths]
         path = ROOT_DIR.joinpath('tests', 'fixtures', 's3')
-        s3 = get_s3()
-        emptied_buckets = set()
         for f in path.rglob('*'):
             relative_path = f.relative_to(path)
             if included_paths and not any(
@@ -108,17 +112,21 @@ def populate_s3():
             ):
                 continue
             bucket, *key = relative_path.parts
-            bucket = s3.Bucket(bucket)
-            if bucket not in _S3_BUCKETS:
-                bucket.create()
-                _S3_BUCKETS.add(bucket)
-            if bucket not in emptied_buckets:
-                bucket.objects.delete()
-                emptied_buckets.add(bucket)
+            client.create_bucket(Bucket=bucket)
+            s3_bucket_exists_waiter.wait(Bucket=bucket)
             if f.is_file():
-                bucket.upload_file(
+                client.upload_file(
+                    Bucket=bucket,
                     Filename=str(f.resolve()),
                     Key='/'.join(key),
                     ExtraArgs={'ServerSideEncryption': 'AES256'}
                 )
-    return populate
+    yield populate
+    mock.stop()
+
+# TODO: use moto server when running ./test.sh so that dont need to
+# load mock_s3 on every restart. probably need a server flag like in moto tests
+
+# FIXME: first test using data-spark database when not run in container
+
+# TODO: get caching up for multistage builds or move to multiple dockerfiles

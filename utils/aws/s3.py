@@ -54,6 +54,9 @@ def open_s3(uri: str, *args: Any, **kwargs: Any) -> smart_open.open:
     transport_params = {
         'resource_kwargs': {
             'endpoint_url': _ENDPOINT_URL,
+        },
+        'ExtraArgs': {
+            'ServerSideEncryption': 'AES256'
         }
     }
     return smart_open.open(uri, transport_params=transport_params, *args, **kwargs)

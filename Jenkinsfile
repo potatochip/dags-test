@@ -89,7 +89,7 @@ pipeline {
                 sh "docker build -t ${IMAGE}:${TAG} --target production -f docker/airflow/Dockerfile \\."
             }
         }
-        stage('Push') {
+        stage('Push Prod Image') {
             when {
                 branch "master"
             }

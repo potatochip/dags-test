@@ -66,10 +66,7 @@ EXPOSE 8080 5555 8793
 
 
 FROM builder as production
-# TODO: pass below from k8s secrets
-ENV FERNET_KEY="eRF9oELwoZLMlJ2BXcCYBlaNUAEV0Ad8jM4POBcGqqc=" \
-    ANONYMIZER_FERNET_KEY="" \
-    ANONYMIZER_SALT=""
+# TODO: pass FERNET_KEY, ANONYMIZER_FERNET_KEY, and ANONYMIZER_SALT from k8s secrets
 ENTRYPOINT ["/srv/entrypoint.sh"]
 CMD ["webserver"]
 
