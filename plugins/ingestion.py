@@ -94,7 +94,7 @@ class IngestPIIOperator(BaseOperator):
             df = self._transform(df, execution_date)
             # write the first chunk with the csv header
             df.to_csv(f, index=False, header=True)
-            for df in reader:
+            for df in reader:  # pragma: no cover
                 df = self._transform(df, execution_date)
                 # every chunk after the first ignore the csv header
                 df.to_csv(f, index=False, header=False)
