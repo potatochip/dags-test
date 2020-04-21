@@ -33,8 +33,6 @@ ENV['AWS_SECRET_ACCESS_KEY'] = 'testing'
 ENV['AWS_SECURITY_TOKEN'] = 'testing'
 ENV['AWS_SESSION_TOKEN'] = 'testing'
 
-MOTO_SERVER_ENABLED = os.getenv('MOTO_SERVER_ENABLED')
-
 
 @pytest.fixture(scope='session')
 def monkeysession():
@@ -96,26 +94,15 @@ def populate_s3():
     since going over api is too slow and using the localstack infra
     directly requires dealing with npm.
     """
-    if MOTO_SERVER_ENABLED:
-        # using moto server, the tests using aws fixtures run slower, but
-        # the test suite overall load faster
-        requests.post(f"{_ENDPOINT_URL}/moto-api/reset")
-    else:
-        # import moto here since import has significant overhead we dont
-        # want when automatically rerunning tests in test.sh
-        from moto import mock_s3
-        mock = mock_s3()
-        mock.start()
-
-    client = get_client()
-    s3_bucket_exists_waiter = client.get_waiter('bucket_exists')
-    created_buckets = set()
-
     def populate(*paths):
         """Populate s3 files for passed paths.
 
         If no paths are passed then populates all files.
         """
+        client = get_client()
+        s3_bucket_exists_waiter = client.get_waiter('bucket_exists')
+        created_buckets = set()
+
         included_paths = [Path(i) for i in paths]
         path = ROOT_DIR.joinpath('tests', 'fixtures', 's3')
         for f in path.rglob('*'):
@@ -137,8 +124,19 @@ def populate_s3():
                     Key='/'.join(key),
                     ExtraArgs={'ServerSideEncryption': 'AES256'}
                 )
-    yield populate
-    if not MOTO_SERVER_ENABLED:
+
+    if os.getenv('MOTO_SERVER_ENABLED'):
+        # using moto server, the tests using aws fixtures run slower, but
+        # the test suite overall load faster
+        requests.post(f"{_ENDPOINT_URL}/moto-api/reset")
+        yield populate
+    else:
+        # import moto here since import has significant overhead we dont
+        # want when automatically rerunning tests in test.sh
+        from moto import mock_s3
+        mock = mock_s3()
+        mock.start()
+        yield populate
         mock.stop()
 
 

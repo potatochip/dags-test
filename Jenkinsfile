@@ -101,7 +101,7 @@ pipeline {
 
     post {
         always {
-            sh "docker-compose down --remove-orphans -t 1"
+            sh "docker-compose down --remove-orphans -t 0"
             archiveArtifacts artifacts: 'reports/*', fingerprint: true
             junit 'reports/*.xml'
         }

@@ -59,7 +59,6 @@ RUN set -ex \
 COPY ./docker/airflow/requirements/prod.txt .
 RUN pip install --trusted-host pypi.python.org -r prod.txt
 
-COPY . .
 ENV PYTHONPATH="${PYTHONPATH}:/srv"
 
 EXPOSE 8080 5555 8793
@@ -67,6 +66,7 @@ EXPOSE 8080 5555 8793
 
 FROM builder as production
 # TODO: pass FERNET_KEY, ANONYMIZER_FERNET_KEY, and ANONYMIZER_SALT from k8s secrets
+COPY . .
 ENTRYPOINT ["/srv/entrypoint.sh"]
 CMD ["webserver"]
 
@@ -75,9 +75,12 @@ FROM builder as test
 COPY ./docker/airflow/requirements/test.txt ./docker/operators/default/requirements.txt ./
 RUN pip install --trusted-host pypi.python.org -r test.txt -r requirements.txt
 RUN airflow initdb
+COPY . .
 ENTRYPOINT ["/bin/bash"]
 
 
-FROM test as dev
-COPY ./docker/airflow/requirements/dev.txt .
+FROM builder as dev
+COPY ./docker/airflow/requirements/ .
 RUN pip install --trusted-host pypi.python.org -r dev.txt
+RUN airflow initdb
+COPY . .
