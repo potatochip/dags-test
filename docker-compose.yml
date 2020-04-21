@@ -27,6 +27,9 @@ services:
       test: awslocal s3 ls
       interval: 3s
       timeout: 10s
+  moto:
+    image: motoserver/moto
+    command: s3
   airflow:
     build:
       context: .
@@ -68,6 +71,11 @@ services:
       context: .
       dockerfile: docker/airflow/Dockerfile
       target: dev
+    depends_on:
+      - moto
     volumes:
       - .:/srv
     entrypoint: watchmedo auto-restart --recursive --pattern="*.py" --directory="." -- pytest --cov
+    environment:
+      - MOTO_SERVER_ENABLED=1
+      - AWS_ENDPOINT_URL=http://moto:5000

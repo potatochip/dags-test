@@ -8,10 +8,10 @@ import os
 from pathlib import Path
 
 import pytest
+import requests
 from _pytest.monkeypatch import MonkeyPatch
-from moto import mock_s3
 
-from utils.aws.s3 import get_client
+from utils.aws.s3 import _ENDPOINT_URL, get_client
 
 THIS_FILE = Path(__file__).resolve()
 ROOT_DIR = THIS_FILE.parent
@@ -32,6 +32,8 @@ ENV['AWS_ACCESS_KEY_ID'] = 'testing'
 ENV['AWS_SECRET_ACCESS_KEY'] = 'testing'
 ENV['AWS_SECURITY_TOKEN'] = 'testing'
 ENV['AWS_SESSION_TOKEN'] = 'testing'
+
+MOTO_SERVER_ENABLED = os.getenv('MOTO_SERVER_ENABLED')
 
 
 @pytest.fixture(scope='session')
@@ -94,11 +96,20 @@ def populate_s3():
     since going over api is too slow and using the localstack infra
     directly requires dealing with npm.
     """
-    mock = mock_s3()
-    mock.start()
+    if MOTO_SERVER_ENABLED:
+        # using moto server, the tests using aws fixtures run slower, but
+        # the test suite overall load faster
+        requests.post(f"{_ENDPOINT_URL}/moto-api/reset")
+    else:
+        # import moto here since import has significant overhead we dont
+        # want when automatically rerunning tests in test.sh
+        from moto import mock_s3
+        mock = mock_s3()
+        mock.start()
 
     client = get_client()
     s3_bucket_exists_waiter = client.get_waiter('bucket_exists')
+    created_buckets = set()
 
     def populate(*paths):
         """Populate s3 files for passed paths.
@@ -115,8 +126,10 @@ def populate_s3():
             ):
                 continue
             bucket, *key = relative_path.parts
-            client.create_bucket(Bucket=bucket)
-            s3_bucket_exists_waiter.wait(Bucket=bucket)
+            if bucket not in created_buckets:
+                client.create_bucket(Bucket=bucket)
+                s3_bucket_exists_waiter.wait(Bucket=bucket)
+                created_buckets.add(bucket)
             if f.is_file():
                 client.upload_file(
                     Bucket=bucket,
@@ -125,11 +138,10 @@ def populate_s3():
                     ExtraArgs={'ServerSideEncryption': 'AES256'}
                 )
     yield populate
-    mock.stop()
+    if not MOTO_SERVER_ENABLED:
+        mock.stop()
 
-# TODO: use moto server when running ./test.sh so that dont need to
-# load mock_s3 on every restart. probably need a server flag like in moto tests
-
-# FIXME: first test using data-spark database when not run in container
 
 # TODO: get caching up for multistage builds or move to multiple dockerfiles
+# TODO: drop localstack completely for moto-server in airflow ui?
+# TODO: remove SKIP_BOOTSTRAP if not used
