@@ -63,10 +63,13 @@ def this_repo():
 
 
 @pytest.fixture(scope='session')
-def dagbag():
+def dagbag(monkeysession):
     """Return a dagbag object from airflow."""
-    # import airflow here so envvar changed first
+    # perform airflow imports here so envvar changed first
+    from airflow import settings
     from airflow.models import DagBag
+    # prevent loading old dag repo policy in airflow_local_settings
+    monkeysession.setattr(settings, 'policy', lambda task_instance: None)
     return DagBag(include_examples=False)
 
 
