@@ -9,6 +9,8 @@ from airflow.models import TaskInstance
 from airflow.operators.ingestion import IngestPIIOperator
 from airflow.utils.state import State
 
+from utils.aws.s3 import get_client, open_s3
+
 DEFAULT_DATE = datetime(2020, 4, 1)
 
 
@@ -20,38 +22,51 @@ def run_operator(operator):
     assert ti.state == State.SUCCESS
 
 
-def csv_file(columns, data):
-    df = pd.DataFrame(data, columns=columns)
-    obj = BytesIO()
-    obj.write(df.to_csv(index=False).encode())
-    obj.seek(0)
-    return obj
-
-
 class TestIngestion:
-    def test_pii_ingestion(self):
-        msisdn = 123
-        in_file = csv_file(columns=['msisdn', 'pet'],
-                           data=[[msisdn, 'cat']])
+    @pytest.mark.parametrize('path, pattern, expected_out', [
+        ('s3://bucket/prefix/', r'key.csv', 's3://out/key.csv'),
+        ('bucket/prefix/', r'key.csv', 's3://out/key.csv'),
+        ('s3://bucket/', r'prefix/key.csv', 's3://out/prefix/key.csv'),
+        ('bucket/', r'prefix/key.csv', 's3://out/prefix/key.csv'),
+    ])
+    def test_pii_ingestion(self, path, pattern, expected_out, populate_s3):
+        populate_s3('bucket/prefix/key.csv', 'out/')
 
         def callback(df):
             df['callback_column'] = True
             return df
 
-        with tempfile.NamedTemporaryFile() as tmp:
-            run_operator(
-                IngestPIIOperator(
-                    task_id='ingest',
-                    input_path=in_file,
-                    output_path=tmp.name,
-                    pii_columns=['msisdn'],
-                    transform_func=callback
-                )
+        run_operator(
+            IngestPIIOperator(
+                task_id='ingest',
+                key_pattern=pattern,
+                input_path=path,
+                output_path='out',
+                pii_columns=['msisdn'],
+                transform_func=callback
             )
-            df = pd.read_csv(tmp.name)
+        )
+        s3 = get_client()
+        df = pd.read_csv(open_s3(expected_out))
 
-        assert df.msisdn[0] != msisdn
+        assert df.msisdn[0] not in {'123', 123}
         assert df.shape == (1, 4)
         assert df.columns.tolist() == [
             'msisdn', 'pet', 'execution_date', 'callback_column'
         ]
+
+    def test_pii_ingest_empty_file(self, populate_s3):
+        populate_s3('bucket/empty.csv', 'out/')
+
+        run_operator(
+            IngestPIIOperator(
+                task_id='ingest',
+                key_pattern=r'empty.csv',
+                input_path='bucket',
+                output_path='out',
+                pii_columns=[]
+            )
+        )
+        s3 = get_client()
+        response = s3.list_objects(Bucket='out', Prefix='empty.csv')
+        assert 'Contents' in response

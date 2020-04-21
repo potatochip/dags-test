@@ -1,6 +1,5 @@
 -r prod.txt
-freezegun
-mock
+moto
 mypy
 pytest
 pytest-cov

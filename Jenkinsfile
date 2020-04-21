@@ -38,30 +38,37 @@ pipeline {
         }
         stage('Build Test Container') {
             steps {
-                sh "COMPOSE_DOCKER_CLI_BUILD=1 docker-compose build test"
-                sh "docker-compose up -d test"
+                sh "COMPOSE_DOCKER_CLI_BUILD=1 docker-compose build ci"
+                sh "SKIP_BOOTSTRAP=1 docker-compose up -d ci"
             }
         }
         stage('Test') {
             parallel {
                 stage('Type Check Packages') {
                     steps {
-                        sh "docker-compose exec -T test mypy -p dag --junit-xml reports/mypy_packages.xml"
+                        sh "docker-compose exec -T ci mypy -p settings --junit-xml reports/mypy_settings.xml"
+                        sh "docker-compose exec -T ci mypy -p tasks --junit-xml reports/mypy_tasks.xml"
+                        sh "docker-compose exec -T ci mypy -p utils --junit-xml reports/mypy_utils.xml"
                     }
                 }
                 stage('Type Check Dags') {
                     steps {
-                        sh "docker-compose exec -T test mypy --namespace-packages -p dags --junit-xml reports/mypy_dags.xml"
+                        sh "docker-compose exec -T ci mypy --namespace-packages -p dags --junit-xml reports/mypy_dags.xml"
                     }
                 }
                 stage('Type Check Plugins') {
                     steps {
-                        sh "docker-compose exec -T test mypy --namespace-packages -p plugins --junit-xml reports/mypy_plugins.xml"
+                        sh "docker-compose exec -T ci mypy --namespace-packages -p plugins --junit-xml reports/mypy_plugins.xml"
                     }
                 }
                 stage('Test') {
                     steps {
-                        sh "docker-compose exec -T test pytest --junitxml=reports/nosetests.xml --cov --cov-report=xml:reports/coverage.xml --cov-report=html:reports/coverage.html"
+                        sh "docker-compose exec -T ci pytest --junitxml=reports/nosetests.xml --cov --cov-report=xml:reports/coverage.xml --cov-report=html:reports/coverage.html"
+                    }
+                    post {
+                        failure {
+                            sh "docker-compose logs > reports/docker-compose.log"
+                        }
                     }
                 }
             }
@@ -82,7 +89,7 @@ pipeline {
                 sh "docker build -t ${IMAGE}:${TAG} --target production -f docker/airflow/Dockerfile \\."
             }
         }
-        stage('Push') {
+        stage('Push Prod Image') {
             when {
                 branch "master"
             }
@@ -94,7 +101,7 @@ pipeline {
 
     post {
         always {
-            sh "docker-compose down --remove-orphans"
+            sh "docker-compose down --remove-orphans -t 1"
             archiveArtifacts artifacts: 'reports/*', fingerprint: true
             junit 'reports/*.xml'
         }
