@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Start local airflow ui on localhost:8080
+
+docker-compose up --build airflow
+docker-compose down -t 0

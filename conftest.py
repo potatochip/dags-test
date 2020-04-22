@@ -100,7 +100,6 @@ def populate_s3():
         If no paths are passed then populates all files.
         """
         client = get_client()
-        s3_bucket_exists_waiter = client.get_waiter('bucket_exists')
         created_buckets = set()
 
         included_paths = [Path(i) for i in paths]
@@ -115,7 +114,6 @@ def populate_s3():
             bucket, *key = relative_path.parts
             if bucket not in created_buckets:
                 client.create_bucket(Bucket=bucket)
-                s3_bucket_exists_waiter.wait(Bucket=bucket)
                 created_buckets.add(bucket)
             if f.is_file():
                 client.upload_file(
@@ -127,19 +125,14 @@ def populate_s3():
 
     if os.getenv('MOTO_SERVER_ENABLED'):
         # using moto server, the tests using aws fixtures run slower, but
-        # the test suite overall load faster
+        # the test suite overall loads faster
         requests.post(f"{_ENDPOINT_URL}/moto-api/reset")
         yield populate
     else:
-        # import moto here since import has significant overhead we dont
-        # want when automatically rerunning tests in test.sh
+        # import moto here since import has significant overhead which we dont
+        # need when automatically rerunning tests in test.sh
         from moto import mock_s3
         mock = mock_s3()
         mock.start()
         yield populate
         mock.stop()
-
-
-# TODO: get caching up for multistage builds or move to multiple dockerfiles
-# TODO: drop localstack completely for moto-server in airflow ui?
-# TODO: remove SKIP_BOOTSTRAP if not used

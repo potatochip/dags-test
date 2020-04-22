@@ -1,4 +1,5 @@
 -r test.txt
+awscli
 flake8
 flake8-docstrings
 watchdog[watchmedo]

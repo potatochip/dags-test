@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Load fixtures into localstack for testing the airflow ui
+# These are reloaded each time for necessary tests
+
+set -e
+
+if [[ $SKIP_BOOTSTRAP -eq 1 ]] ; then exit ; fi
+
+cd /srv/tests/fixtures/s3
+for dir in */
+do
+    aws s3 --endpoint-url=${AWS_ENDPOINT_URL} mb s3://$dir
+    aws s3 --endpoint-url=${AWS_ENDPOINT_URL} cp --recursive --sse AES256 $dir s3://$dir
+done

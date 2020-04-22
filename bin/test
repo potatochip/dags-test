@@ -1,0 +1,7 @@
+#!/bin/bash
+# run tests in a container
+# tests rerun every time a file is saved
+
+docker-compose build dev
+docker-compose run dev "$@"
+docker-compose down -t 0

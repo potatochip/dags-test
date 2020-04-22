@@ -5,9 +5,12 @@ pipeline {
     }
 
     environment {
+        COMPOSE_DOCKER_CLI_BUILD = 1
         PROJECT = 'dags'
-        CHANNEL = '#test-slack-notif'
+        CHANNEL = '#data-notifications'
         IMAGE = "juvo/${PROJECT}"
+        REGISTRY = "registry.juvo.mobi"
+        DOCKER_RUN = "docker-compose exec -T ci"
     }
 
     agent {
@@ -15,7 +18,7 @@ pipeline {
             label 'jenkins-data'
             yaml libraryResource('pod_templates/data_agent_dind.yaml')
             defaultContainer 'jenkins-agent-data'
-            idleMinutes 600
+            // idleMinutes 600
         }
     }
 
@@ -36,45 +39,67 @@ pipeline {
                 sh "flake8 ."
             }
         }
-        stage('Build Test Container') {
+        stage('Pull Cache') {
             steps {
-                sh "COMPOSE_DOCKER_CLI_BUILD=1 docker-compose build ci"
-                sh "SKIP_BOOTSTRAP=1 docker-compose up -d ci"
+                script {
+                    docker.withRegistry("https://${REGISTRY}", "juvo-registry-credentials") {
+                        sh "docker pull ${REGISTRY}/${IMAGE}:latest || true"
+                    }
+                }
             }
         }
-        stage('Test') {
+        stage('Build Test Container') {
+            steps {
+                sh "docker-compose build ci"
+                sh "docker-compose up -d ci"
+            }
+        }
+        stage('Cache Image') {
+            when {
+                not {
+                    branch "master"
+                }
+            }
+            steps {
+                script {
+                    docker.withRegistry("https://${REGISTRY}", "juvo-registry-credentials") {
+                        sh "docker tag ${IMAGE} ${REGISTRY}/${IMAGE}:latest"
+                        sh "docker tag ${IMAGE} ${REGISTRY}/${IMAGE}:${CHANGE_BRANCH}"
+                        sh "docker push ${REGISTRY}/${IMAGE}"
+                    }
+                }
+            }
+        }
+        stage('Run Tests') {
             parallel {
                 stage('Type Check Packages') {
                     steps {
-                        sh "docker-compose exec -T ci mypy -p settings --junit-xml reports/mypy_settings.xml"
-                        sh "docker-compose exec -T ci mypy -p tasks --junit-xml reports/mypy_tasks.xml"
-                        sh "docker-compose exec -T ci mypy -p utils --junit-xml reports/mypy_utils.xml"
+                        sh "ls -la"
+                        sh "ls -la dag"
+                        sh "${DOCKER_RUN} mypy -p dag --junit-xml reports/mypy_dag.xml"
+                        sh "${DOCKER_RUN} mypy -p utils --junit-xml reports/mypy_utils.xml"
                     }
                 }
                 stage('Type Check Dags') {
                     steps {
-                        sh "docker-compose exec -T ci mypy --namespace-packages -p dags --junit-xml reports/mypy_dags.xml"
+                        sh "${DOCKER_RUN} mypy --namespace-packages -p dags --junit-xml reports/mypy_dags.xml"
                     }
                 }
                 stage('Type Check Plugins') {
                     steps {
-                        sh "docker-compose exec -T ci mypy --namespace-packages -p plugins --junit-xml reports/mypy_plugins.xml"
+                        sh "${DOCKER_RUN} mypy --namespace-packages -p plugins --junit-xml reports/mypy_plugins.xml"
                     }
                 }
                 stage('Test') {
                     steps {
-                        sh "docker-compose exec -T ci pytest --junitxml=reports/nosetests.xml --cov --cov-report=xml:reports/coverage.xml --cov-report=html:reports/coverage.html"
-                    }
-                    post {
-                        failure {
-                            sh "docker-compose logs > reports/docker-compose.log"
-                        }
+                        sh "${DOCKER_RUN} pytest --junitxml=reports/nosetests.xml --cov --cov-report=xml:reports/coverage.xml --cov-report=html:reports/coverage.html"
                     }
                 }
             }
         }
-       stage('Static Analysis') {
+        stage('Static Analysis') {
             steps {
+                sh 'docker cp "$(docker-compose ps -q ci)":/srv/reports .'
                 sh "sed -i 's|/srv|${WORKSPACE}|' reports/coverage.xml"
                 withSonarQubeEnv('SonarQube') {
                     sh "sonar-scanner -Dsonar.host.url=${SONAR_HOST_URL} -Dsonar.projectKey=${PROJECT}  -Dsonar.python.coverage.reportPaths=reports/coverage.xml"
@@ -101,6 +126,7 @@ pipeline {
 
     post {
         always {
+            sh 'docker cp "$(docker-compose ps -q ci)":/srv/reports .'
             sh "docker-compose down --remove-orphans -t 0"
             archiveArtifacts artifacts: 'reports/*', fingerprint: true
             junit 'reports/*.xml'
