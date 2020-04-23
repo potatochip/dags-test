@@ -64,7 +64,7 @@ pipeline {
                 script {
                     docker.withRegistry("https://${REGISTRY}", "juvo-registry-credentials") {
                         sh "docker tag ${IMAGE} ${REGISTRY}/${IMAGE}:latest"
-                        sh "docker tag ${IMAGE} ${REGISTRY}/${IMAGE}:${CHANGE_BRANCH}"
+                        sh "docker tag ${IMAGE} ${REGISTRY}/${IMAGE}:${CHANGE_BRANCH} || true"
                         sh "docker push ${REGISTRY}/${IMAGE}"
                     }
                 }
