@@ -4,6 +4,14 @@
 
 ``` shell
 .
+├── bin
+├── dag
+│   ├── settings  # package defining constant values for carriers, etc
+│   │   ├── __init__.py
+│   │   └── timbrazil.py
+│   ├── tasks  # package for separating business logic from dag logic
+│   │   └── __init__.py
+│   └── __init__.py
 ├── dags  # dag definitions separated by region/carrier
 │   └── sa  # region
 │       └── timbrazil  # carrier
@@ -18,13 +26,6 @@
 │   └── k8s  # container definitions for k8s pod operator
 │       └── default.dockerfile
 ├── plugins  # airflow plugin directory
-│   └── myfirstplugin.py
-├── settings  # package defining constant values for carriers, etc
-│   ├── __init__.py
-│   └── timbrazil.py
-├── tasks  # package for separating business logic from dag logic
-├── tests
-│   └── test_something.py
 ├── utils  # package for common utility functions
 ├── conftest.py  # global test fixtures
 ├── README.md
@@ -41,14 +42,12 @@ You can create an empty directory as a bucket in s3. However, git ignores empty 
 
 ### Run Airflow Locally
 
-Use `docker-compose up airflow` to run those airflow components locally. View the UI at `http://localhost:8080`. Run `docker-compose down` when you are finished.
+Use `bin/airflow` to run airflow components locally. View the UI at `http://localhost:8080`. `ctrl+c` to exit.
 
 Changes to the codebase should be reflected in the UI and scheduler without needing to restart.
 
-Any changes to requirements files will necessitate runing `docker-compose build airflow`.
-
 ### Testing
 
-Test using `./test.sh`. The tests will automatically rerun every time you save a change to the codebase. `ctrl+c` to exit.
+Test using `bin/test`. The tests will automatically rerun every time you save a change to the codebase. `ctrl+c` to exit.
 
-You can also run tests directly with `pytest` after installing the root requirements.txt and running `airflow initdb`.
+In order to run tests directly with `pytest`, you must install the requirements.txt in root and run `airflow initdb`.

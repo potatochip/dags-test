@@ -1,73 +1,66 @@
 ---
 version: "3.7"
 services:
-  postgres:
+  redshift:
     image: postgres:9.6
     cap_add:
       - IPC_LOCK
     privileged: true
     restart: always
     ports:
-      - 5432:5432
+      - 5439:5432
     environment:
       - POSTGRES_USER=airflow
       - POSTGRES_PASSWORD=airflow
       - POSTGRES_DB=airflow
   aws:
-    image: localstack/localstack:0.11.0
-    ports:
-      - 4566:4566
-    volumes:
-      - ./tests/fixtures:/docker-entrypoint-initaws.d:ro
-    environment:
-      - SERVICES=s3
-      - START_WEB=0
-      - SKIP_BOOTSTRAP
-    healthcheck:
-      test: awslocal s3 ls
-      interval: 3s
-      timeout: 10s
+    image: motoserver/moto
+    command: s3
   airflow:
     build:
       context: .
       dockerfile: docker/airflow/Dockerfile
-      target: production
+      target: dev
     restart: always
+    entrypoint: /srv/bin/airflow_entrypoint
     depends_on:
-      - postgres
+      - redshift
       - aws
     volumes:
       - .:/srv
-    command: webserver
     ports:
       - 8080:8080
     environment:
-      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
-      - AWS_ENDPOINT_URL=http://aws:4566
+      - AIRFLOW__CORE__EXECUTOR=SequentialExecutor
+      - AWS_ENDPOINT_URL=http://aws:5000
+      - REDSHIFT_SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@redshift:5439/airflow
       - ANONYMIZER_FERNET_KEY=TRSq95QF5Pj9ldN002l0GgLX3ze-d92ZSZAmz3pd4wY=
       - ANONYMIZER_SALT=pepper
       - AWS_ACCESS_KEY_ID=testing
       - AWS_SECRET_ACCESS_KEY=testing
       - AWS_SECURITY_TOKEN=testing
       - AWS_SESSION_TOKEN=testing
-    healthcheck:
-      test: ["CMD-SHELL", "[ -f /root/airflow/airflow-webserver.pid ]"]
-      interval: 30s
-      timeout: 30s
-      retries: 3
   ci:
+    image: ${IMAGE}
     build:
       context: .
       dockerfile: docker/airflow/Dockerfile
-      target: test
-    volumes:
-      - .:/srv
+      target: ci
+      cache_from:
+        - ${IMAGE}:${CHANGE_BRANCH}
+        - ${IMAGE}
+    command: /bin/bash
     stdin_open: true
   dev:
     build:
       context: .
       dockerfile: docker/airflow/Dockerfile
       target: dev
+    depends_on:
+      - aws
     volumes:
       - .:/srv
     entrypoint: watchmedo auto-restart --recursive --pattern="*.py" --directory="." -- pytest --cov
+    environment:
+      - MOTO_SERVER_ENABLED=1
+      - AWS_ENDPOINT_URL=http://aws:5000

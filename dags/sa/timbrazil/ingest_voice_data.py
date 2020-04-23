@@ -18,7 +18,7 @@ from datetime import timedelta
 from airflow import DAG
 from airflow.operators.ingestion import IngestPIIOperator
 
-from settings import timbrazil
+from dag.settings import timbrazil
 
 # TODO: use pod operator ?
 

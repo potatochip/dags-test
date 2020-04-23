@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Initialize single node instance of airflow for local testing in container
+
+airflow initdb
+. bin/bootstrap &
+airflow scheduler &
+airflow webserver

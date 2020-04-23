@@ -1,3 +1,4 @@
 # dependencies should be listed in the requirements folder instead of here
 -r ./docker/airflow/requirements/dev.txt
 -r ./docker/operators/default/requirements.txt
+apache-airflow
