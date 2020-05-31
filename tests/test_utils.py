@@ -1,6 +1,6 @@
 import pytest
 
-from utils.anonymize import Anonymizer
+from dag.utils.anonymize import Encrypter
 
 
 @pytest.mark.parametrize('value', [
@@ -11,7 +11,7 @@ from utils.anonymize import Anonymizer
     ''
 ])
 def test_anonymizer(value):
-    anonymizer = Anonymizer()
-    encrypted = anonymizer.encrypt(value)
-    decrypted = anonymizer.decrypt(encrypted)
+    e = Encrypter()
+    encrypted = e.encrypt(value)
+    decrypted = e.decrypt(encrypted)
     assert str(value) == decrypted

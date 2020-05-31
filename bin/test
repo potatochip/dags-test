@@ -2,6 +2,6 @@
 # run tests in a container
 # tests rerun every time a file is saved
 
-docker-compose build dev
+COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker-compose build dev
 docker-compose run dev "$@"
 docker-compose down -t 0

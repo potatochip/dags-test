@@ -2,16 +2,17 @@ import tempfile
 from datetime import datetime
 from io import BytesIO
 
+import numpy as np
 import pandas as pd
 import pytest
 from airflow import DAG
 from airflow.models import TaskInstance
-from airflow.operators.ingestion import IngestPIIOperator
+from airflow.operators.ingestion import PIIOperator
 from airflow.utils.state import State
 
-from utils.aws.s3 import get_client, open_s3
+from dag.utils.aws.s3 import get_client, get_object
 
-DEFAULT_DATE = datetime(2020, 4, 1)
+DEFAULT_DATE = datetime(2020, 4, 1, 1)
 
 
 def run_operator(operator):
@@ -23,50 +24,81 @@ def run_operator(operator):
 
 
 class TestIngestion:
-    @pytest.mark.parametrize('path, pattern, expected_out', [
-        ('s3://bucket/prefix/', r'key.csv', 's3://out/key.csv'),
-        ('bucket/prefix/', r'key.csv', 's3://out/key.csv'),
-        ('s3://bucket/', r'prefix/key.csv', 's3://out/prefix/key.csv'),
-        ('bucket/', r'prefix/key.csv', 's3://out/prefix/key.csv'),
+    @pytest.mark.parametrize('path, out_prefix', [
+        ('s3://bucket/prefix/', True),
+        ('bucket/prefix/', True),
+        ('s3://bucket/prefix/', False),
+        ('bucket/prefix/', False),
     ])
-    def test_pii_ingestion(self, path, pattern, expected_out, populate_s3):
-        populate_s3('bucket/prefix/key.csv', 'out/')
+    def test_pii_ingestion(self, path, out_prefix, populate_s3):
+        pattern = r'key.csv'
+        populate_s3('bucket/prefix', 'out/')
 
-        def callback(df):
+        def callback(df, *a):
             df['callback_column'] = True
             return df
 
+        out_path = 'out/prefix' if out_prefix else 'out'
         run_operator(
-            IngestPIIOperator(
+            PIIOperator(
                 task_id='ingest',
-                key_pattern=pattern,
                 input_path=path,
-                output_path='out',
+                output_path=out_path,
+                key_pattern=pattern,
                 pii_columns=['msisdn'],
-                transform_func=callback
+                transform_func=callback,
             )
         )
-        s3 = get_client()
-        df = pd.read_csv(open_s3(expected_out))
+        path = f's3://{out_path}/2020/04/01/00/key.csv'
+        df = pd.read_csv(get_object(path=path))
 
         assert df.msisdn[0] not in {'123', 123}
         assert df.shape == (1, 4)
         assert df.columns.tolist() == [
-            'msisdn', 'pet', 'execution_date', 'callback_column'
+            'msisdn', 'pet', 'callback_column', 'execution_date'
         ]
 
     def test_pii_ingest_empty_file(self, populate_s3):
-        populate_s3('bucket/empty.csv', 'out/')
+        populate_s3('bucket/', 'out/')
 
         run_operator(
-            IngestPIIOperator(
+            PIIOperator(
                 task_id='ingest',
+                input_path='bucket/prefix',
+                output_path='out/prefix',
                 key_pattern=r'empty.csv',
-                input_path='bucket',
-                output_path='out',
                 pii_columns=[]
             )
         )
         s3 = get_client()
-        response = s3.list_objects(Bucket='out', Prefix='empty.csv')
-        assert 'Contents' in response
+        response = s3.list_objects(Bucket='out', Prefix='prefix/2020/04/01/00/empty.csv')
+        assert 'Contents' not in response
+
+
+    def test_anonymization(self, mock_anonymizer, populate_s3):
+        # explicit test where some non numeric values are interspersed
+        # with numeric in an msisdn column
+        mock_anonymizer({'8675309': '1234567890'})
+        populate_s3('bucket/', 'out/')
+
+        run_operator(
+            PIIOperator(
+                task_id='ingest',
+                input_path='bucket/prefix',
+                output_path='out/prefix',
+                key_pattern='anonymization.csv',
+                msisdn_column='msisdn',
+            )
+        )
+        path = 'out/prefix/2020/04/01/00/anonymization.csv'
+        df = pd.read_csv(get_object(path=path), dtype=str)
+        assert df.uuid.to_list() == [
+            '1234567890',
+            '1234567890',
+            np.nan,
+            np.nan,
+            np.nan,
+            '1234567890',
+            np.nan,
+            '1234567890'
+        ]

@@ -11,7 +11,7 @@ import pytest
 import requests
 from _pytest.monkeypatch import MonkeyPatch
 
-from utils.aws.s3 import _ENDPOINT_URL, get_client
+from dag.utils.aws.s3 import get_client
 
 THIS_FILE = Path(__file__).resolve()
 ROOT_DIR = THIS_FILE.parent
@@ -24,8 +24,8 @@ ENV['AIRFLOW__CORE__PLUGINS_FOLDER'] = str(ROOT_DIR.joinpath('plugins'))
 
 TEST_FERNET_KEY = 'TRSq95QF5Pj9ldN002l0GgLX3ze-d92ZSZAmz3pd4wY='
 ENV['FERNET_KEY'] = TEST_FERNET_KEY
-ENV['ANONYMIZER_FERNET_KEY'] = TEST_FERNET_KEY
-ENV['ANONYMIZER_SALT'] = 'pepper'
+ENV['PII_FERNET_KEY'] = TEST_FERNET_KEY
+ENV['PII_SALT'] = 'pepper'
 
 # prevent using real account just in case
 ENV['AWS_ACCESS_KEY_ID'] = 'testing'
@@ -126,7 +126,8 @@ def populate_s3():
     if os.getenv('MOTO_SERVER_ENABLED'):
         # using moto server, the tests using aws fixtures run slower, but
         # the test suite overall loads faster
-        requests.post(f"{_ENDPOINT_URL}/moto-api/reset")
+        endpoint_url = os.getenv('AWS_ENDPOINT_URL')
+        requests.post(f"{endpoint_url}/moto-api/reset")
         yield populate
     else:
         # import moto here since import has significant overhead which we dont
@@ -136,3 +137,21 @@ def populate_s3():
         mock.start()
         yield populate
         mock.stop()
+
+
+@pytest.fixture
+def mock_anonymizer(monkeypatch):
+    response = None
+    def set_response(value):
+        nonlocal response
+        response = value
+
+    def patch(*args, **kwargs):
+        class Response:
+            status_code = '200'
+            def json(self):
+                return response
+        return Response()
+    from airflow.hooks.http_hook import HttpHook
+    monkeypatch.setattr(HttpHook, 'run', patch)
+    return set_response

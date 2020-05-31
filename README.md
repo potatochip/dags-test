@@ -10,7 +10,7 @@
 │   │   ├── __init__.py
 │   │   └── timbrazil.py
 │   ├── tasks  # package for separating business logic from dag logic
-│   │   └── __init__.py
+│   ├── utils
 │   └── __init__.py
 ├── dags  # dag definitions separated by region/carrier
 │   └── sa  # region
@@ -26,7 +26,6 @@
 │   └── k8s  # container definitions for k8s pod operator
 │       └── default.dockerfile
 ├── plugins  # airflow plugin directory
-├── utils  # package for common utility functions
 ├── conftest.py  # global test fixtures
 ├── README.md
 └── setup.cfg

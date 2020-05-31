@@ -1,110 +1,186 @@
 """Operators for ingesting raw carrier files."""
+import json
 import os
 import re
-from datetime import datetime
-from typing import Any, Callable, List, Optional
+from datetime import datetime, timedelta
+from tempfile import TemporaryDirectory
+from typing import Any, Callable, List
 
 import pandas as pd
+from airflow.hooks.http_hook import HttpHook
 from airflow.models import BaseOperator
 from airflow.plugins_manager import AirflowPlugin
 from airflow.utils.decorators import apply_defaults
 
-from utils.anonymize import Anonymizer
-from utils.aws.s3 import iter_keys, open_s3
+from dag.utils.anonymize import Encrypter
+from dag.utils.aws import s3
+from dag.utils.common import iter_chunks
 
 
-def _s3_path(path: str) -> str:
-    if not path.startswith('s3://'):
-        return 's3://' + path
-    return path
-
-
-class IngestPIIOperator(BaseOperator):
+class PIIOperator(BaseOperator):
     """Ingest raw file and write anonymized version.
 
+    Note: This operator sets the schedule interval internally to @hourly.
+    Your dag must do the same.
+
     This reads a csv and writes an anonymized and optionally transformed
-    version of it to our public path.
+    version of it to our public path. Both the input path and the output
+    path are appended with `y/m/d/h` using the hour previous to the execution
+    date.
 
-    Note: Beyond matching filenames, they key_pattern is also used for
-    writing. So if it is declared with a prefix then that prefix is also
-    used when writing the new file to s3.
-
-    The execution date is automatically appended to the file.
+    The execution date is automatically appended as a column in the file.
     """
 
-    template_fields = ('key_pattern', 'input_path', 'output_path')
-    ui_color = '#ffefeb'
+    template_fields = ("key_pattern", "input_path", "output_path")
+    ui_color = "#ffefeb"
+    chunksize = 100000
 
     @apply_defaults
-    def __init__(self,
-                 key_pattern: str,
-                 input_path: str,
-                 output_path: str,
-                 *,
-                 pii_columns: List[str],
-                 transform_func: Callable[[pd.DataFrame], pd.DataFrame] = None,
-                 csv_kwargs: dict = None,
-                 **kwargs: Any) -> None:
-        """Init IngestPIIOperator.
+    def __init__(
+        self,
+        input_path: str,
+        output_path: str,
+        *,
+        key_pattern: str = None,
+        anonymizer_conn_id: str = None,
+        msisdn_column: str = None,
+        pii_columns: List[str] = None,
+        transform_func: Callable[[pd.DataFrame, str], pd.DataFrame] = None,
+        csv_kwargs: dict = None,
+        **kwargs: Any,
+    ) -> None:
+        """Init PIIOperator.
 
         Args:
-            key_pattern (str): Regex pattern for matching s3 keys.
-            input_path (str): Path to raw carrier files
-            output_path (str): Path where new file will be written
-            pii_columns (str): Column names that contain PII that should be
-                encrypted prior to writing.
+            input_path (str): S3 path to raw carrier files
+            output_path (str): S3 path where new file will be written
+            key_pattern (str, optional): Regex pattern for matching s3 keys.
+            anonymizer_conn_id (str, optional): Connection id for the carrier's
+                anonymizer service
+            msisdn_column (str, optional): Column name that has msisdn
+                that will be used for uuid creation
+            pii_columns (str, optional): Column names that contain PII
+                that should be encrypted
             transform_func (Callable[[pd.DataFrame], pd.DataFrame], optional):
-                A functions used to transform a dataframe. Takes a pandas
-                dataframe as a parameter and returns the same. Defaults to None.
+                A functions used to transform a dataframe. The function signature
+                should align with the following:
+                     `transform(df: DataFrame, msisdn_column: str) -> DataFrame`.
+                All columns in the passed dataframe will be of dtype str/object.
+                Defaults to None.
             csv_kwargs (dict, optional): Pandas keyword arguments passed to
                 `pd.read_csv`. Defaults to None.
         """
-        super().__init__(**kwargs)
+        super().__init__(schedule_interval="@hourly", **kwargs)
+        self.input_path = input_path
+        self.output_path = output_path
         self.key_pattern = key_pattern
-        self.input_path = _s3_path(input_path)
-        self.output_path = _s3_path(output_path)
+        self.msisdn_column = msisdn_column
         self.pii_columns = pii_columns or []
-        self.transform_func = transform_func or (lambda df: df)
+        self.transform_func = transform_func
         self.csv_kwargs = csv_kwargs or {}
-        self._anonymizer: Optional[Anonymizer] = None
+        self._encrypter: Encrypter = None
+        self._anonymizer_service = HttpHook(http_conn_id=anonymizer_conn_id)
+        self._execution_date: datetime = None
+        self._msisdn_lookup: dict = {}
 
     def execute(self, context: Any) -> None:
         """Execute operator task."""
-        # initialize anonymizer here so can create dags without failure due to no key
-        self._anonymizer = Anonymizer()
-        is_target_file = re.compile(self.key_pattern, re.I).match
-        for key in iter_keys(path=self.input_path):
-            if is_target_file(key):
-                self._ingest_file(key, context['execution_date'])
+        self._execution_date = context["execution_date"]
+        # initialize anonymizer here because sometimes dags on machine with no key
+        self._encrypter = Encrypter()
+
+        # pattern is compiled here to allow resolving jinja templating first
+        is_target_file = re.compile(self.key_pattern or "", re.I).fullmatch
+
+        path = self._make_path(self.input_path)
+        for key in s3.iter_keys(path=path):
+            if not self.key_pattern or is_target_file(key):
+                self.logger.info("Working on %s", key)
+                self._ingest_file(key)
+        self._msisdn_lookup = {}
         self.log.info("Done")
 
-    def _ingest_file(self, fname: str, execution_date: datetime) -> None:
-        input_path = os.path.join(self.input_path, fname)
-        output_path = os.path.join(self.output_path, fname)
-        # read the s3 file as a series of streamed dataframes
+    def _make_path(self, path: str, fname: str = None) -> str:
+        """Create timestamped path for s3.
+
+        This reads/writes the previous hour from the execution date.
+        """
+        timestamp = (self._execution_date - timedelta(hours=1)).strftime("%Y/%m/%d/%H/")
+        return os.path.join(path, timestamp, fname or "")
+
+    def _ingest_file(self, fname: str) -> None:
+        with TemporaryDirectory() as td:
+            local_in = os.path.join(td, "infile.csv")
+            local_out = os.path.join(td, "outfile.csv")
+
+            s3_in_path = self._make_path(self.input_path, fname)
+            s3.download_file(path=s3_in_path, fpath=local_in)
+
+            try:
+                self._iterate_file(local_in, local_out)
+            except pd.errors.EmptyDataError:
+                self.log.warning("%s is empty", fname)
+                return
+
+            fname, _ = os.path.splitext(fname)
+            fname += ".csv"
+            s3_out_path = self._make_path(self.output_path, fname)
+            s3.upload_file(path=s3_out_path, fpath=local_out)
+        self.log.info("Wrote %s", s3_out_path)
+
+    def _iterate_file(self, local_in: str, local_out: str) -> None:
+        # iterate through the file as a series of dataframes
+        reader = pd.read_csv(
+            local_in, chunksize=self.chunksize, dtype=str, **self.csv_kwargs
+        )
+
+        header = True
         try:
-            reader = pd.read_csv(open_s3(input_path), chunksize=100000, **self.csv_kwargs)
-        except pd.errors.EmptyDataError:
-            self.log.warning('%s is empty', fname)
-            reader = iter([pd.DataFrame()])
+            for df in reader:
+                df = self._transform(df)
+                df.to_csv(local_out, index=False, header=header, mode="a")
+                header = False
+        except pd.errors.ParserError as exc:
+            # if last frame in reader is just the footer then error will raise
+            self.logger.warning(exc)
 
-        # write the new file as a multipart stream to s3
-        with open_s3(output_path, 'w') as f:
-            df = next(reader)
-            df = self._transform(df, execution_date)
-            # write the first chunk with the csv header
-            df.to_csv(f, index=False, header=True)
-            for df in reader:  # pragma: no cover
-                df = self._transform(df, execution_date)
-                # every chunk after the first ignore the csv header
-                df.to_csv(f, index=False, header=False)
-        self.log.info("Wrote %s", output_path)
+    def _transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        if self.transform_func:
+            df = self.transform_func(df, self.msisdn_column)
+        if self.msisdn_column:
+            df = self._anonymize(df)
+        # encrypt pii, including msisdn column, after anonymized uuid created
+        df = self._encrypt_pii(df)
+        df.loc[:, "execution_date"] = self._execution_date
+        return df
 
-    def _transform(self, df: pd.DataFrame, execution_date: datetime) -> pd.DataFrame:
-        df['execution_date'] = execution_date
-        df = self.transform_func(df)
-        for column in self.pii_columns:
-            df[column] = df[column].map(self._anonymizer.encrypt)
+    def _anonymize(self, df: pd.DataFrame) -> pd.DataFrame:
+        # if not numeric then dont annonymize msisdn
+        numeric_msisdns = df[self.msisdn_column].str.isnumeric()
+        msisdns = df.loc[numeric_msisdns, self.msisdn_column].copy()
+        unique_msisdns = list(set(msisdns) - set(self._msisdn_lookup))
+        # offset the anonymizer timestamp by one hour to correlate with
+        # the dag ingesting data from the previou hour.
+        timestamp = self._execution_date - timedelta(hours=1)
+        for chunk in iter_chunks(unique_msisdns, 20000):
+            response = self._anonymizer_service.run(
+                f"anonymizer/uuids/{timestamp.strftime('%Y-%m-%d')}",
+                data=json.dumps(chunk),
+                headers={"Content-Type": "application/json"},
+            )
+            assert response.status_code == "200"
+            self._msisdn_lookup.update(response.json())
+        df.loc[msisdns.index, "uuid"] = msisdns.map(self._msisdn_lookup)
+        return df
+
+    def _encrypt_pii(self, df: pd.DataFrame) -> pd.DataFrame:
+        # add msisdn column as pii in case someone forgot it
+        columns = set(self.pii_columns)
+        if self.msisdn_column:
+            columns.add(self.msisdn_column)
+
+        for column in columns:
+            df.loc[:, column] = df[column].map(self._encrypter.encrypt)
         return df
 
 
@@ -112,4 +188,4 @@ class IngestionPlugin(AirflowPlugin):
     """Plugin class for ingestion."""
 
     name = "ingestion"
-    operators = [IngestPIIOperator]
+    operators = [PIIOperator]
