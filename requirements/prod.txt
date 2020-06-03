@@ -1,0 +1,2 @@
+# prod dependencies should be listed in setup.py
+.

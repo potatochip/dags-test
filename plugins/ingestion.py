@@ -1,4 +1,6 @@
 """Operators for ingesting raw carrier files."""
+import csv
+import gzip
 import json
 import os
 import re
@@ -31,7 +33,13 @@ class PIIOperator(BaseOperator):
     The execution date is automatically appended as a column in the file.
     """
 
-    template_fields = ("key_pattern", "input_path", "output_path")
+    template_fields = (
+        "key_pattern",
+        "input_path",
+        "output_path",
+        "uuid_read_path",
+        "uuid_write_path",
+    )
     ui_color = "#ffefeb"
     chunksize = 100000
 
@@ -42,6 +50,8 @@ class PIIOperator(BaseOperator):
         output_path: str,
         *,
         key_pattern: str = None,
+        uuid_read_path: str = None,
+        uuid_write_path: str = None,
         anonymizer_conn_id: str = None,
         msisdn_column: str = None,
         pii_columns: List[str] = None,
@@ -55,25 +65,26 @@ class PIIOperator(BaseOperator):
             input_path (str): S3 path to raw carrier files
             output_path (str): S3 path where new file will be written
             key_pattern (str, optional): Regex pattern for matching s3 keys.
-            anonymizer_conn_id (str, optional): Connection id for the carrier's
-                anonymizer service
-            msisdn_column (str, optional): Column name that has msisdn
-                that will be used for uuid creation
-            pii_columns (str, optional): Column names that contain PII
-                that should be encrypted
-            transform_func (Callable[[pd.DataFrame], pd.DataFrame], optional):
-                A functions used to transform a dataframe. The function signature
-                should align with the following:
+            uuid_read_path (str, optional): Uses a cache of msisdn to uuid at this
+                location. Defaults to None.
+            uuid_write_path (str, optional): Writes a cache of msisdn to uuid
+                post-anonymization at this location. Defaults to None.
+            anonymizer_conn_id (str, optional): Connection id for the carrier's anonymizer service
+            msisdn_column (str, optional): Column name that will be used for uuid creation
+            pii_columns (str, optional): Column names that contain PII that should be encrypted
+            transform_func (Callable[[pd.DataFrame], pd.DataFrame], optional):  A function used to
+                transform a dataframe. The function signature should align with the following:
                      `transform(df: DataFrame, msisdn_column: str) -> DataFrame`.
-                All columns in the passed dataframe will be of dtype str/object.
+                All columns in the passed dataframe will be of dtype str/object. Defaults to None.
+            csv_kwargs (dict, optional): Pandas keyword arguments passed to `pd.read_csv`.
                 Defaults to None.
-            csv_kwargs (dict, optional): Pandas keyword arguments passed to
-                `pd.read_csv`. Defaults to None.
         """
-        super().__init__(schedule_interval="@hourly", **kwargs)
+        super().__init__(**kwargs)
         self.input_path = input_path
         self.output_path = output_path
         self.key_pattern = key_pattern
+        self.uuid_read_path = uuid_read_path
+        self.uuid_write_path = uuid_write_path
         self.msisdn_column = msisdn_column
         self.pii_columns = pii_columns or []
         self.transform_func = transform_func
@@ -89,6 +100,9 @@ class PIIOperator(BaseOperator):
         # initialize anonymizer here because sometimes dags on machine with no key
         self._encrypter = Encrypter()
 
+        if self.uuid_read_path:
+            self._load_uuids(self.uuid_read_path)
+
         # pattern is compiled here to allow resolving jinja templating first
         is_target_file = re.compile(self.key_pattern or "", re.I).fullmatch
 
@@ -97,7 +111,9 @@ class PIIOperator(BaseOperator):
             if not self.key_pattern or is_target_file(key):
                 self.logger.info("Working on %s", key)
                 self._ingest_file(key)
-        self._msisdn_lookup = {}
+
+        if self.uuid_write_path:
+            self._dump_uuids(self.uuid_write_path)
         self.log.info("Done")
 
     def _make_path(self, path: str, fname: str = None) -> str:
@@ -155,14 +171,21 @@ class PIIOperator(BaseOperator):
         return df
 
     def _anonymize(self, df: pd.DataFrame) -> pd.DataFrame:
-        # if not numeric then dont annonymize msisdn
+        # sometimes non-msisdns are included in an msisdn column
         numeric_msisdns = df[self.msisdn_column].str.isnumeric()
         msisdns = df.loc[numeric_msisdns, self.msisdn_column].copy()
-        unique_msisdns = list(set(msisdns) - set(self._msisdn_lookup))
+
+        # check for existence in lookup rather than spending time and money
+        # casting to set for each dataframe
+        unique_msisdns = set()
+        for msisdn in msisdns:
+            if msisdn not in self._msisdn_lookup:
+                unique_msisdns.add(msisdn)
+
         # offset the anonymizer timestamp by one hour to correlate with
         # the dag ingesting data from the previou hour.
         timestamp = self._execution_date - timedelta(hours=1)
-        for chunk in iter_chunks(unique_msisdns, 20000):
+        for chunk in iter_chunks(list(unique_msisdns), 20000):
             response = self._anonymizer_service.run(
                 f"anonymizer/uuids/{timestamp.strftime('%Y-%m-%d')}",
                 data=json.dumps(chunk),
@@ -170,7 +193,10 @@ class PIIOperator(BaseOperator):
             )
             assert response.status_code == "200"
             self._msisdn_lookup.update(response.json())
-        df.loc[msisdns.index, "uuid"] = msisdns.map(self._msisdn_lookup)
+
+        # cannot map directly over msisdn_lookup because pandas wastes time and
+        # memory copying the entire dict into memory again so lambda instead
+        df.loc[msisdns.index, "uuid"] = msisdns.map(lambda x: self._msisdn_lookup[x])
         return df
 
     def _encrypt_pii(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -182,6 +208,28 @@ class PIIOperator(BaseOperator):
         for column in columns:
             df.loc[:, column] = df[column].map(self._encrypter.encrypt)
         return df
+
+    def _dump_uuids(self, path: str) -> None:
+        with TemporaryDirectory() as td:
+            local_path = os.path.join(td, "lookup.csv")
+            with gzip.open(local_path, "wt") as f:
+                writer = csv.writer(f)
+                writer.writerows(self._msisdn_lookup.items())
+
+            s3.upload_file(fpath=local_path, path=path)
+        self.logger.info("dumped %s", path)
+        self._msisdn_lookup = {}
+
+    def _load_uuids(self, path: str) -> None:
+        with TemporaryDirectory() as td:
+            local_path = os.path.join(td, "lookup.csv")
+            s3.download_file(path=path, fpath=local_path)
+
+            with gzip.open(local_path, "rt") as f:
+                reader = csv.reader(f)
+                for msisdn, uuid in reader:
+                    self._msisdn_lookup[msisdn] = uuid
+        self.logger.info("loaded %s", path)
 
 
 class IngestionPlugin(AirflowPlugin):
