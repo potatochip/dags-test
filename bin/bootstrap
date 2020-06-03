@@ -6,6 +6,7 @@ set -e
 
 if [[ $SKIP_BOOTSTRAP -eq 1 ]] ; then exit ; fi
 
+sleep 5
 cd /srv/tests/fixtures/s3
 for dir in */
 do

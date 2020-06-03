@@ -91,23 +91,28 @@ def iter_keys(
 
 
 @parse_path
-def download_file(bucket: str, key: str, fpath: str, *, path: str = None) -> None:
+def download_file(
+    bucket: str = None, key: str = None, fpath: str = None, *, path: str = None
+) -> None:
     """Download file from s3 to fpath.
 
     This is a threaded multipart download at a threshold size.
     """
-    assert bucket and key
+    assert bucket and key and fpath
     client = get_client()
     transfer = S3Transfer(client)
     transfer.download_file(bucket, key, fpath)
 
 
 @parse_path
-def upload_file(bucket: str, key: str, fpath: str, *, path: str = None) -> None:
+def upload_file(
+    bucket: str = None, key: str = None, fpath: str = None, *, path: str = None
+) -> None:
     """Upload file to s3 from fpath.
 
     This is a threaded multipart upload at a threshold size.
     """
+    assert bucket and key and fpath
     client = get_client()
     transfer = S3Transfer(client)
     transfer.upload_file(

@@ -16,15 +16,8 @@
 │   └── sa  # region
 │       └── timbrazil  # carrier
 │           └── ingest_voice_data.py
-├── docker  # requirements and dockerfile definitions
-│   ├── airflow  # the main container for airflow
-│   │   ├── requirements
-│   │   │   ├── dev.txt
-│   │   │   ├── prod.txt
-│   │   │   └── test.txt
-│   │   └── Dockerfile
-│   └── k8s  # container definitions for k8s pod operator
-│       └── default.dockerfile
+├── k8s  # container definitions for k8s pod operator
+│   └── legacy.dockerfile  # used to run legacy python2 code
 ├── plugins  # airflow plugin directory
 ├── conftest.py  # global test fixtures
 ├── README.md

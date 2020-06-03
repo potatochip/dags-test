@@ -73,12 +73,12 @@ pipeline {
                 }
                 stage('Type Check Dags') {
                     steps {
-                        sh "${DOCKER_RUN} mypy --namespace-packages -p dags --junit-xml reports/mypy_dags.xml"
+                        sh "${DOCKER_RUN} mypy dags/*/* --junit-xml reports/mypy_dags.xml"
                     }
                 }
                 stage('Type Check Plugins') {
                     steps {
-                        sh "${DOCKER_RUN} mypy --namespace-packages -p plugins --junit-xml reports/mypy_plugins.xml"
+                        sh "${DOCKER_RUN} mypy -p plugins --junit-xml reports/mypy_plugins.xml"
                     }
                 }
                 stage('Test') {
@@ -98,22 +98,6 @@ pipeline {
                 withSonarQubeEnv('SonarQube') {
                     sh "sonar-scanner -Dsonar.host.url=${SONAR_HOST_URL} -Dsonar.projectKey=${PROJECT} -Dsonar.sources=dag,dags,plugins -Dsonar.python.coverage.reportPaths=reports/coverage.xml"
                 }
-            }
-        }
-        stage('Build Prod Image') {
-            when {
-                branch "master"
-            }
-            steps {
-                sh "docker build -t ${IMAGE}:${TAG} --target production -f docker/airflow/Dockerfile \\."
-            }
-        }
-        stage('Push Prod Image') {
-            when {
-                branch "master"
-            }
-            steps {
-                pushDockerContainer(env.IMAGE, env.TAG)
             }
         }
     }

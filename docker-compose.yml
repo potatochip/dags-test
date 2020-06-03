@@ -17,10 +17,7 @@ services:
     image: motoserver/moto
     command: s3
   airflow:
-    build:
-      context: .
-      dockerfile: docker/airflow/Dockerfile
-      target: dev
+    build: .
     restart: always
     entrypoint: /srv/bin/airflow_entrypoint
     depends_on:
@@ -31,30 +28,18 @@ services:
     ports:
       - 8080:8080
     environment:
-      - AIRFLOW__CORE__EXECUTOR=SequentialExecutor
       - AWS_ENDPOINT_URL=http://aws:5000
       - REDSHIFT_SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@redshift:5439/airflow
-      - PII_FERNET_KEY=TRSq95QF5Pj9ldN002l0GgLX3ze-d92ZSZAmz3pd4wY=
-      - PII_SALT=pepper
-      - AWS_ACCESS_KEY_ID=testing
-      - AWS_SECRET_ACCESS_KEY=testing
-      - AWS_SECURITY_TOKEN=testing
-      - AWS_SESSION_TOKEN=testing
   ci:
     image: ${CACHE_IMAGE}
     build:
       context: .
-      dockerfile: docker/airflow/Dockerfile
-      target: ci
       cache_from:
         - ${CACHE_IMAGE}
     command: /bin/bash
     stdin_open: true
   dev:
-    build:
-      context: .
-      dockerfile: docker/airflow/Dockerfile
-      target: dev
+    build: .
     depends_on:
       - aws
     volumes:

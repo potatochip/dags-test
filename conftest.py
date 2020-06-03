@@ -20,7 +20,6 @@ ENV = os.environ
 # do not set AIRFLOW_HOME in order to avoid littering repo with
 # files that airflow creates automatically
 ENV['AIRFLOW__CORE__DAGS_FOLDER'] = str(ROOT_DIR.joinpath('dags'))
-ENV['AIRFLOW__CORE__PLUGINS_FOLDER'] = str(ROOT_DIR.joinpath('plugins'))
 
 TEST_FERNET_KEY = 'TRSq95QF5Pj9ldN002l0GgLX3ze-d92ZSZAmz3pd4wY='
 ENV['FERNET_KEY'] = TEST_FERNET_KEY
@@ -68,6 +67,7 @@ def dagbag(monkeysession):
     # perform airflow imports here so envvar changed first
     from airflow import settings
     from airflow.models import DagBag
+
     # prevent loading old dag repo policy in airflow_local_settings
     monkeysession.setattr(settings, 'policy', lambda task_instance: None)
     return DagBag(include_examples=False)
@@ -94,6 +94,7 @@ def populate_s3():
     since going over api is too slow and using the localstack infra
     directly requires dealing with npm.
     """
+
     def populate(*paths):
         """Populate s3 files for passed paths.
 
@@ -107,8 +108,7 @@ def populate_s3():
         for f in path.rglob('*'):
             relative_path = f.relative_to(path)
             if included_paths and not any(
-                p in relative_path.parents or p == relative_path
-                for p in included_paths
+                p in relative_path.parents or p == relative_path for p in included_paths
             ):
                 continue
             bucket, *key = relative_path.parts
@@ -120,7 +120,7 @@ def populate_s3():
                     Bucket=bucket,
                     Filename=str(f.resolve()),
                     Key='/'.join(key),
-                    ExtraArgs={'ServerSideEncryption': 'AES256'}
+                    ExtraArgs={'ServerSideEncryption': 'AES256'},
                 )
 
     if os.getenv('MOTO_SERVER_ENABLED'):
@@ -133,6 +133,7 @@ def populate_s3():
         # import moto here since import has significant overhead which we dont
         # need when automatically rerunning tests in test.sh
         from moto import mock_s3
+
         mock = mock_s3()
         mock.start()
         yield populate
@@ -142,6 +143,7 @@ def populate_s3():
 @pytest.fixture
 def mock_anonymizer(monkeypatch):
     response = None
+
     def set_response(value):
         nonlocal response
         response = value
@@ -149,9 +151,13 @@ def mock_anonymizer(monkeypatch):
     def patch(*args, **kwargs):
         class Response:
             status_code = '200'
+
             def json(self):
                 return response
+
         return Response()
+
     from airflow.hooks.http_hook import HttpHook
+
     monkeypatch.setattr(HttpHook, 'run', patch)
     return set_response
